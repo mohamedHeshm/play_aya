@@ -52,6 +52,7 @@ const CONFIG = {
 
   /* ---------------- تهيئة الأنظمة ---------------- */
   ParticleSystem.init($('particle-canvas'));
+  World.init($('scene3d-canvas'));
   AudioManager.init();
   AudioManager.setMusicOn(state.musicOn);
   Achievements.init(state.achievements);
@@ -154,6 +155,9 @@ const CONFIG = {
     if (STAGE_ORDER.includes(name)) {
       hud.classList.remove('hidden');
       setStageLabel(name);
+      // ضمّي الـ HUD داخل بطاقة عنوان المرحلة نفسها لمنع أي تداخل بصري
+      const header = screens[name].querySelector('.stage-header');
+      if (header && hud.parentElement !== header) header.appendChild(hud);
       state.currentStage = STAGE_ORDER.indexOf(name) + 1;
       persist();
     } else {
@@ -161,6 +165,8 @@ const CONFIG = {
     }
 
     restartBtn.classList.toggle('hidden', name === 'intro');
+
+    if (World && World.isReady !== undefined) World.setScreen(name);
 
     startScreenLogic(name);
   }
@@ -247,13 +253,17 @@ const CONFIG = {
       box.classList.add('opened');
       hint.classList.add('hidden');
       finalMsg.classList.remove('hidden');
+      revealGiftMessage(true);
+      if (World && World.isReady) World.markGiftOpened();
     }
 
     function tryOpen() {
       if (box.classList.contains('opened')) return;
+      box.classList.add('opened');
       Game.Stage5.open(box, () => {
         hint.classList.add('hidden');
         finalMsg.classList.remove('hidden');
+        revealGiftMessage(false);
         if (!state.stagesCompleted.includes('gift-opened')) {
           state.stagesCompleted.push('gift-opened');
         }
@@ -263,6 +273,27 @@ const CONFIG = {
 
     box.onclick = tryOpen;
     box.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') tryOpen(); };
+  }
+
+  /* ---------------- رسالة الهدية: بطاقة سينمائية + typewriter RTL ---------------- */
+  let typeTimer = null;
+  function revealGiftMessage(instant) {
+    const p = $('gift-message-text');
+    if (!p) return;
+    const full = (p.dataset.text || '').replace(/\r/g, '');
+    clearInterval(typeTimer);
+    p.textContent = instant ? full : '';
+    p.classList.add('is-typing');
+    if (instant) { p.classList.remove('is-typing'); return; }
+    let i = 0;
+    typeTimer = setInterval(() => {
+      i++;
+      p.textContent = full.slice(0, i);
+      if (i >= full.length) {
+        clearInterval(typeTimer);
+        p.classList.remove('is-typing');
+      }
+    }, 38);
   }
 
   $('btn-open-video').addEventListener('click', openVideo);

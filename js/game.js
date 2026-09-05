@@ -625,20 +625,33 @@ const Game = (() => {
      المرحلة ٥ : الهدية
      ===================================================================== */
   const Stage5 = (() => {
+    function celebrate() {
+      const cx = window.innerWidth / 2, cy = window.innerHeight * 0.4;
+      ParticleSystem.emit('confetti', cx, cy, 40, { burst: true, life: 90, gravity: 0.15 });
+      ParticleSystem.emit('heart', cx, cy, 20, { burst: true, life: 80, gravity: 0.05 });
+      ParticleSystem.emit('star', cx, cy, 15, { burst: true, life: 80, gravity: 0.05 });
+      AudioManager.sfx('celebration');
+      const first = Achievements.unlock('birthday_surprise');
+      if (first && callbacks.onAchievement) callbacks.onAchievement('birthday_surprise');
+      addScore(50);
+    }
+
     function open(boxEl, onDone) {
+      // المسار الأساسي: صندوق هدية ثلاثي الأبعاد داخل عالم Three.js
+      if (typeof World !== 'undefined' && World.isReady) {
+        World.triggerGiftOpen(() => {
+          celebrate();
+          if (onDone) onDone();
+        });
+        return;
+      }
+      // Fallback بدون WebGL: نفس تجربة الصندوق المسطح القديمة
       AudioManager.sfx('giftOpen');
       boxEl.classList.add('opening');
       setTimeout(() => {
         boxEl.classList.remove('opening');
         boxEl.classList.add('opened');
-        const rect = boxEl.getBoundingClientRect();
-        ParticleSystem.emit('confetti', rect.left + rect.width / 2, rect.top, 40, { burst: true, life: 90, gravity: 0.15 });
-        ParticleSystem.emit('heart', rect.left + rect.width / 2, rect.top, 20, { burst: true, life: 80, gravity: 0.05 });
-        ParticleSystem.emit('star', rect.left + rect.width / 2, rect.top, 15, { burst: true, life: 80, gravity: 0.05 });
-        AudioManager.sfx('celebration');
-        const first = Achievements.unlock('birthday_surprise');
-        if (first && callbacks.onAchievement) callbacks.onAchievement('birthday_surprise');
-        addScore(50);
+        celebrate();
         if (onDone) onDone();
       }, 500);
     }
