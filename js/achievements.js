@@ -6,65 +6,23 @@
 const Achievements = (() => {
 
   const LIST = {
-    first_heart: {
-      icon: '❤️',
-      title: 'First Heart',
-      desc: 'أول قلب جمعتيه',
-    },
-    heart_collector: {
-      icon: '💖',
-      title: 'Heart Collector',
-      desc: 'جمعتي ١٠ قلوب',
-    },
-    memory_keeper: {
-      icon: '🌹',
-      title: 'Memory Keeper',
-      desc: 'اكتشفتي كل الذكريات',
-    },
-    wish_maker: {
-      icon: '⭐',
-      title: 'Wish Maker',
-      desc: 'اخترتي نجمتك',
-    },
-    love_explorer: {
-      icon: '🏆',
-      title: 'Love Explorer',
-      desc: 'خلصتي كل المراحل',
-    },
-    birthday_surprise: {
-      icon: '🎁',
-      title: 'Birthday Surprise',
-      desc: 'فتحتي الهدية',
-    },
+    first_heart: { icon: '❤️', title: 'First Heart', desc: 'أول قلب جمعتيه' },
+    heart_collector: { icon: '💖', title: 'Heart Collector', desc: 'خلصتي LEVEL 01 بالكامل' },
+    memory_keeper: { icon: '🌹', title: 'Memory Keeper', desc: 'اكتشفتي كل الذكريات' },
+    wish_maker: { icon: '⭐', title: 'Wish Maker', desc: 'جمعتي كل النجوم' },
+    love_explorer: { icon: '🏆', title: 'Love Explorer', desc: 'خلصتي كل المراحل' },
+    birthday_surprise: { icon: '🎁', title: 'Birthday Surprise', desc: 'فتحتي الهدية' },
   };
 
   let unlocked = new Set();
   let onUnlockCallback = null;
 
-  function init(savedList) {
-    unlocked = new Set(savedList || []);
-  }
+  function init(savedList) { unlocked = new Set(savedList || []); }
+  function has(id) { return unlocked.has(id); }
+  function getAll() { return LIST; }
+  function getUnlocked() { return Array.from(unlocked); }
+  function onUnlock(cb) { onUnlockCallback = cb; }
 
-  function has(id) {
-    return unlocked.has(id);
-  }
-
-  function getAll() {
-    return LIST;
-  }
-
-  function getUnlocked() {
-    return Array.from(unlocked);
-  }
-
-  function onUnlock(cb) {
-    onUnlockCallback = cb;
-  }
-
-  /**
-   * يفتح إنجاز جديد إذا لم يكن مفتوحًا من قبل
-   * يرجع true إذا تم فتحه الآن لأول مرة
-   */
   function unlock(id) {
     if (!LIST[id] || unlocked.has(id)) return false;
     unlocked.add(id);

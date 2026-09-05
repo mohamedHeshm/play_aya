@@ -1,10 +1,8 @@
 /* =====================================================================
-   رحلة إلى قلبك ❤️  —  Stylesheet
-   عالم ليلي سينمائي ثلاثي الأبعاد (Three.js) + واجهة هادئة بلا تداخل
+   style.css — Romantic Adventure Game
    ===================================================================== */
 
 :root {
-  /* لوحة الألوان الدافئة + سماء ليلية هادئة */
   --warm-white:   #FFFDF9;
   --blush:        #F8EFEA;
   --rose-pale:    #E8C8C8;
@@ -17,16 +15,8 @@
   --soft-pink:    #e9b9c4;
   --purple-blue:  #33355e;
 
-  --ink-06:       rgba(48, 37, 38, 0.06);
-  --ink-10:       rgba(48, 37, 38, 0.10);
-  --ink-18:       rgba(48, 37, 38, 0.18);
-  --ink-35:       rgba(48, 37, 38, 0.35);
-  --rose-24:      rgba(184, 139, 139, 0.24);
-  --rose-40:      rgba(184, 139, 139, 0.40);
-
-  /* لوحات زجاجية هادئة — تُقرأ بوضوح فوق المشهد الليلي */
-  --panel-bg:     rgba(20, 18, 34, 0.42);
-  --panel-bg-2:   rgba(255, 253, 249, 0.92);
+  --panel-bg:     rgba(20, 18, 34, 0.5);
+  --panel-bg-2:   rgba(255, 253, 249, 0.94);
   --panel-border: rgba(233, 185, 196, 0.35);
   --panel-ink:    #FFF7EE;
 
@@ -39,651 +29,369 @@
   --safe-inline: env(safe-area-inset-right, 0px);
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  max-width: 100vw;
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
   overflow: hidden;
   background: var(--night-navy-2);
   color: var(--ink);
   font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: none;
   overscroll-behavior: none;
-  user-select: none;
 }
 
-/* لو WebGL غير متاح — خلفية بديلة هادئة بدل الشاشة السوداء */
-body.no-webgl {
-  background: radial-gradient(ellipse at 50% 0%, #1c1f45 0%, #0b1330 55%, #060a1c 100%);
-}
-
-p, h1, h2, h3 { user-select: none; }
-
-button {
-  font-family: inherit;
-  border: none;
-  background: none;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* =====================================================================
-   العالم ثلاثي الأبعاد — خلفية دائمة خلف كل الشاشات
-   ===================================================================== */
-#scene3d-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-body.no-webgl #scene3d-canvas { display: none; }
-
-#particle-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-/* =====================================================================
-   عناصر عامة — لوحات هادئة تُقرأ فوق مشهد ليلي
-   ===================================================================== */
-.glass-panel {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 18px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 10px 34px rgba(0,0,0,0.28);
-  padding: 22px;
-  color: var(--panel-ink);
-}
-
-.btn-primary, .btn-secondary {
-  display: inline-block;
-  padding: 12px 6px;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--panel-ink);
-  border-bottom: 1px solid var(--soft-pink);
-  transition: color 0.5s var(--ease-soft), border-color 0.5s var(--ease-soft), transform 0.5s var(--ease-soft), opacity 0.5s var(--ease-soft);
-  touch-action: manipulation;
-}
-
-.btn-primary { background: none; }
-.btn-primary:hover { color: var(--soft-pink); border-color: var(--warm-white); transform: translateY(-1px); }
-.btn-primary:active { opacity: 0.7; transform: translateY(0); }
-
-.btn-secondary {
-  color: var(--soft-pink);
-  border-bottom-color: var(--rose-pale);
-}
-.btn-secondary:active { opacity: 0.7; }
-
-/* أزرار خارج اللوحات (فوق مشهد الليل) تحتاج تباينًا داكنًا شفافًا خاصًا بها */
-.icon-btn {
-  position: fixed;
-  top: calc(14px + var(--safe-top));
-  z-index: 50;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(20,18,34,0.5);
-  border: 1px solid var(--panel-border);
-  backdrop-filter: blur(6px);
-  color: var(--panel-ink);
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.5s var(--ease-soft), transform 0.5s var(--ease-soft);
-}
-.icon-btn:active { transform: scale(0.94); opacity: 0.85; }
-
-#music-toggle { inset-inline-start: calc(14px + var(--safe-inline)); }
-.restart-btn { inset-inline-end: calc(14px + var(--safe-inline)); }
-.skip-btn {
-  top: auto;
-  bottom: calc(20px + var(--safe-bottom));
-  inset-inline-end: calc(14px + var(--safe-inline));
-  width: auto;
-  padding: 9px 18px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-}
-
-/* =====================================================================
-   الـ HUD — يُنقل عبر main.js ليعيش داخل بطاقة عنوان المرحلة النشطة،
-   بهذا لا يتداخل أبدًا مع اسم المرحلة أو أي عنصر آخر
-   ===================================================================== */
-.hud {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px 14px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255,247,238,0.16);
-}
-
-.hud-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.hud-item--stage {
-  width: 100%;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.hud-scores {
-  display: flex;
-  gap: 14px;
-}
-
-/* =====================================================================
-   الشاشات (Screens)
-   ===================================================================== */
-#app {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-}
-
-.screen {
-  position: absolute;
-  inset: 0;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  padding-top: calc(20px + var(--safe-top));
-  padding-bottom: calc(20px + var(--safe-bottom));
-  opacity: 0;
-  transform: translateY(10px) scale(0.99);
-  transition: opacity 0.9s var(--ease-soft), transform 0.9s var(--ease-soft);
-  overflow: hidden;
-}
-
-.screen.active {
-  display: flex;
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-/* شاشة البداية */
-#screen-intro { text-align: center; }
-
-.intro-content {
-  max-width: 440px;
-  width: 100%;
-  text-align: center;
-  animation: floatIn 1.1s var(--ease-soft) both;
-}
-
-@keyframes floatIn {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.intro-line {
-  font-size: 1.05rem;
-  color: var(--soft-pink);
-  margin-bottom: 20px;
-  min-height: 1.6em;
-  line-height: 1.9;
-}
-
-.game-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(1.5rem, 6vw, 2.1rem);
-  line-height: 1.5;
-  margin: 0 0 30px;
-  color: var(--panel-ink);
-}
-
-.heart-pulse {
-  display: inline-block;
-  animation: pulse 3.2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 0.92; }
-  50% { transform: scale(1.06); opacity: 1; }
-}
-
-/* رؤوس المراحل — بطاقة واحدة نظيفة تحتوي العنوان/التلميح وتستضيف الـ HUD */
-.stage-header {
-  position: absolute;
-  top: calc(14px + var(--safe-top));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-  width: min(92%, 480px);
-  max-height: calc(100vh - 28px - var(--safe-top) - var(--safe-bottom));
-  overflow-y: auto;
-  text-align: center;
-  padding: 12px 18px;
-}
-
-.stage-header--minimal { padding: 10px 18px; }
-
-.stage-title-row { display: none; } /* احتياطي فقط — العنوان يظهر عبر hud-item--stage */
-
-.stage-hint {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--soft-pink);
-  line-height: 1.7;
-}
-
-/* رسائل عائمة أثناء المراحل — دائمًا داخل حدود الشاشة وقابلة للتمرير عند الحاجة */
-.floating-message {
-  position: absolute;
-  bottom: calc(90px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-  width: min(90%, 460px);
-  max-height: calc(100vh - 220px - var(--safe-top) - var(--safe-bottom));
-  overflow-y: auto;
-  text-align: center;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  padding: 14px 20px;
-  color: var(--panel-ink);
-  font-size: 0.98rem;
-  line-height: 1.8;
-  animation: msgIn 0.8s var(--ease-soft) both;
-}
-
-@keyframes msgIn {
-  from { opacity: 0; transform: translate(-50%, 12px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
-}
+button { font-family: inherit; cursor: pointer; }
 
 .hidden { display: none !important; }
 
-/* =====================================================================
-   كانفس المراحل ١/٣/٤ — شفاف فوق العالم ثلاثي الأبعاد
-   ===================================================================== */
-#stage1-canvas, #stage3-canvas, #stage4-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: 100vw;
-  touch-action: none;
-  z-index: 3;
+/* ---------------- طبقات القماش الثابتة ---------------- */
+#particle-canvas {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  z-index: 40; pointer-events: none;
 }
 
-/* =====================================================================
-   المرحلة ٢: حديقة الذكريات
-   ===================================================================== */
-.memory-garden {
-  position: relative;
-  z-index: 3;
-  width: 100%;
-  max-width: 520px;
-  height: 100%;
-  margin-top: 96px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  align-content: center;
-  padding: 10px;
-  overflow-y: auto;
-}
-
-.memory-item {
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: rgba(255,247,238,0.14);
+/* ---------------- اللوحات الزجاجية ---------------- */
+.glass-panel {
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.7rem;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.22);
-  transition: transform 0.5s var(--ease-soft), box-shadow 0.5s var(--ease-soft), border-color 0.5s var(--ease-soft), background 0.5s var(--ease-soft);
-  animation: memoryReveal 0.9s var(--ease-soft) both;
-}
-
-.memory-item:active { transform: scale(0.94); }
-
-.memory-item.discovered {
-  box-shadow: 0 6px 22px var(--rose-24);
-  border-color: var(--soft-pink);
-  background: rgba(255,247,238,0.32);
-}
-
-@keyframes memoryReveal {
-  from { opacity: 0; transform: translateY(10px) scale(0.94); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-#stage2-continue {
-  position: absolute;
-  z-index: 5;
-  bottom: calc(40px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* =====================================================================
-   نوافذ Modal (الذكريات / الفيديو / التأكيد)
-   ===================================================================== */
-.modal {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(6, 10, 28, 0.55);
-  backdrop-filter: blur(6px);
-  padding: 20px;
-  animation: fadeIn 0.5s var(--ease-soft) both;
-}
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-.modal-content {
-  position: relative;
-  max-width: 420px;
-  width: 100%;
-  max-height: calc(100vh - 40px - var(--safe-top) - var(--safe-bottom));
-  overflow-y: auto;
-  text-align: center;
-  background: var(--panel-bg-2);
-  color: var(--ink);
-  border-radius: 20px;
-  padding: 30px 26px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-  animation: popIn 0.5s var(--ease-soft) both;
-}
-
-.modal-content.small { max-width: 320px; }
-
-@keyframes popIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.modal-close {
-  position: absolute;
-  top: 12px;
-  inset-inline-end: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--blush);
-  color: var(--ink);
-  font-size: 0.95rem;
-  transition: opacity 0.4s var(--ease-soft);
-}
-.modal-close:active { opacity: 0.7; }
-
-.memory-icon { font-size: 2.4rem; margin-bottom: 12px; }
-.memory-image {
-  width: 100%;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  max-height: 240px;
-  object-fit: cover;
-  border: 6px solid var(--white);
-  box-shadow: 0 8px 22px var(--ink-10);
-  transform: rotate(-1deg);
-}
-.memory-text {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  line-height: 1.9;
-  color: var(--ink);
-}
-
-.confirm-actions {
-  display: flex;
-  gap: 18px;
-  justify-content: center;
-  margin-top: 18px;
-  flex-wrap: wrap;
-}
-
-/* =====================================================================
-   المرحلة ٥: الصندوق أصبح جسمًا ثلاثي الأبعاد داخل عالم Three.js.
-   العنصر التالي مجرد منطقة لمس/تركيز شفافة تطابق موضعه تقريبًا،
-   لضمان الوصول عبر اللمس ولوحة المفاتيح دون رسم أي صندوق مسطح فوقه.
-   ===================================================================== */
-.gift-scene {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 22px;
-  height: 100%;
-  padding-bottom: 14vh;
-}
-
-.gift-hit-area {
-  width: min(52vw, 220px);
-  height: min(30vh, 190px);
-  border-radius: 24px;
-  outline-offset: 4px;
-}
-
-.gift-hit-area:focus-visible {
-  outline: 2px solid var(--soft-pink);
-}
-
-/* بديل بصري بسيط فقط عند غياب WebGL (نادر) — كي لا يختفي الصندوق كليًا */
-body.no-webgl .gift-hit-area {
-  background: var(--dusty-rose);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 3.2rem;
-  box-shadow: 0 14px 30px rgba(0,0,0,0.35);
-  transition: transform 0.5s var(--ease-soft);
-}
-body.no-webgl .gift-hit-area::before { content: '🎁'; }
-body.no-webgl .gift-hit-area.opening { animation: giftShake 0.5s var(--ease-soft); }
-body.no-webgl .gift-hit-area.opened { transform: scale(0.9); opacity: 0.75; }
-body.no-webgl .gift-hit-area.opened::before { content: '💌'; }
-@keyframes giftShake {
-  0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(-4deg); }
-  50% { transform: rotate(4deg); }
-  75% { transform: rotate(-2deg); }
-}
-
-.gift-hint {
+  border-radius: 22px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   color: var(--panel-ink);
-  font-size: 0.95rem;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  padding: 26px 22px;
 }
 
-/* =====================================================================
-   بطاقة الرسالة السينمائية — ورقة 3D حقيقية عبر CSS perspective
-   تظهر كاملة دومًا، في منتصف الشاشة، بلا clipping، RTL، مع typewriter
-   ===================================================================== */
-.message-card {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  padding-top: calc(20px + var(--safe-top));
-  padding-bottom: calc(20px + var(--safe-bottom));
-  perspective: 1200px;
-  background: rgba(6, 10, 28, 0.35);
-  animation: fadeIn 0.6s var(--ease-soft) both;
+/* ---------------- الأزرار ---------------- */
+.btn-primary, .btn-secondary {
+  border: none; border-radius: 999px;
+  padding: 14px 30px;
+  font-family: var(--font-body);
+  font-weight: 700; font-size: 16px;
+  transition: transform 0.25s var(--ease-soft), opacity 0.25s var(--ease-soft);
 }
-
-.message-card__paper {
-  width: min(92vw, 420px);
-  max-height: 100%;
-  overflow-y: auto;
-  text-align: center;
-  background:
-    linear-gradient(rgba(255,253,247,0.04), rgba(255,253,247,0.04)),
-    var(--warm-white);
-  color: var(--ink);
-  border-radius: 14px;
-  padding: clamp(20px, 5vw, 34px) clamp(18px, 5vw, 28px);
-  box-shadow: 0 30px 70px rgba(0,0,0,0.45), 0 2px 0 rgba(0,0,0,0.04) inset;
-  transform-style: preserve-3d;
-  animation: paperIn 1s var(--ease-soft) both;
+.btn-primary {
+  background: linear-gradient(135deg, var(--soft-pink), var(--dusty-rose));
+  color: var(--warm-white);
+  box-shadow: 0 10px 24px rgba(185, 139, 139, 0.4);
 }
-
-@keyframes paperIn {
-  0%   { opacity: 0; transform: translateZ(-180px) rotateX(18deg) scale(0.82); }
-  100% { opacity: 1; transform: translateZ(0) rotateX(0deg) scale(1); }
+.btn-primary:active { transform: scale(0.96); }
+.btn-secondary {
+  background: transparent;
+  border: 1.5px solid var(--panel-border);
+  color: var(--panel-ink);
 }
+.btn-small { padding: 10px 20px; font-size: 14px; }
+.btn-play { font-size: 20px; padding: 16px 44px; margin-top: 6px; }
 
-.message-card__text {
-  font-family: var(--font-display);
-  white-space: pre-line;
-  line-height: 1.95;
-  font-size: clamp(1rem, 4vw, 1.15rem);
-  color: var(--ink);
-  min-height: 3.9em;
-}
-
-.message-card__text.is-typing::after {
-  content: '';
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-inline-start: 2px;
-  background: var(--dusty-rose);
-  vertical-align: -0.15em;
-  animation: caretBlink 0.9s steps(1) infinite;
-}
-
-@keyframes caretBlink { 50% { opacity: 0; } }
-
-.gift-final-message .signature {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  color: var(--dusty-rose);
-  margin: 16px 0 20px;
-}
-
-/* =====================================================================
-   الفيديو
-   ===================================================================== */
-.video-modal { background: rgba(6, 10, 28, 0.6); }
-.video-wrapper {
-  position: relative;
-  width: 100%;
-  max-width: 760px;
-}
-
-#birthday-video {
-  width: 100%;
-  max-height: 80vh;
-  border-radius: 14px;
-  background: #000;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
-}
-
-.video-outro {
-  text-align: center;
-  margin-top: 20px;
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  color: var(--white);
-  animation: floatIn 1s var(--ease-soft) both;
-}
-
-/* =====================================================================
-   Achievement Toast
-   ===================================================================== */
-.achievement-toast {
-  position: fixed;
-  top: calc(70px + var(--safe-top));
-  left: 50%;
-  transform: translateX(-50%) translateY(-160%);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(20,18,34,0.72);
+/* ---------------- أيقونات ثابتة (صوت / إعادة بدء) ---------------- */
+.icon-btn {
+  position: fixed; top: calc(14px + var(--safe-top));
+  z-index: 70;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
+  color: var(--panel-ink);
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
   backdrop-filter: blur(10px);
+}
+#music-toggle { inset-inline-start: calc(14px + var(--safe-inline)); }
+.restart-btn { inset-inline-end: calc(14px + var(--safe-inline)); font-size: 20px; }
+
+/* =========================================================
+   الشاشات
+========================================================== */
+#app { position: fixed; inset: 0; }
+
+.screen {
+  position: absolute; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  flex-direction: column;
+  text-align: center;
+}
+.screen.active { display: flex; }
+
+#screen-intro, #screen-final {
+  background: radial-gradient(circle at 50% 20%, #2a2148, var(--night-navy-2));
+  padding: 24px;
+}
+
+.intro-content, .final-content {
+  max-width: 440px; width: 100%;
+}
+.intro-line { font-family: var(--font-display); font-size: 18px; opacity: 0.85; margin-bottom: 10px; }
+.game-title { font-family: var(--font-display); font-size: 30px; margin: 6px 0 24px; }
+.heart-pulse { display: inline-block; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+
+.final-title { font-size: 26px; }
+.final-stats { display: grid; gap: 10px; margin: 18px 0; }
+.final-stat {
+  display: flex; justify-content: space-between;
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 10px 16px; font-size: 15px;
+}
+.final-message { font-family: var(--font-display); font-size: 16px; opacity: 0.9; margin-bottom: 18px; }
+
+/* =========================================================
+   خريطة العالم
+========================================================== */
+#screen-worldmap { background: linear-gradient(180deg, #1a1233, var(--night-navy-2)); padding: 24px; }
+.worldmap-header { margin-bottom: 22px; padding: 14px 26px; }
+.worldmap-header h2 { margin: 0; font-family: var(--font-display); font-size: 20px; }
+
+.worldmap-nodes {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 34px;
+  max-height: 62vh; overflow-y: auto;
+  padding: 10px 0;
+}
+.map-node {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--panel-bg-2);
+  border: 2px solid var(--rose-pale);
+  border-radius: 20px;
+  padding: 14px 26px;
+  min-width: 190px;
+  color: var(--ink);
+  transition: transform 0.2s var(--ease-soft);
+}
+.map-node:nth-child(even) { transform: translateX(-38px); }
+.map-node:nth-child(odd) { transform: translateX(38px); }
+.map-node.is-current { border-color: var(--dusty-rose); box-shadow: 0 0 0 6px rgba(233,185,196,0.28); animation: nodeGlow 1.6s ease-in-out infinite; }
+@keyframes nodeGlow { 0%,100% { box-shadow: 0 0 0 6px rgba(233,185,196,0.28); } 50% { box-shadow: 0 0 0 12px rgba(233,185,196,0.12); } }
+.map-node.is-complete { border-color: #8fbf8f; background: rgba(255,253,249,0.85); }
+.map-node.is-locked { opacity: 0.45; filter: grayscale(0.6); }
+.map-node__badge { font-size: 30px; }
+.map-node__label { font-weight: 700; font-size: 14px; letter-spacing: 0.5px; }
+.map-node__sub { font-size: 12px; opacity: 0.75; }
+
+/* =========================================================
+   شاشة اللعب
+========================================================== */
+#screen-level { padding: 0; }
+#level-canvas {
+  width: 100%; height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---------------- Game HUD ---------------- */
+.hud {
+  position: fixed;
+  top: calc(14px + var(--safe-top));
+  left: 50%; transform: translateX(-50%);
+  z-index: 60;
+  min-width: 240px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   border-radius: 16px;
-  padding: 12px 18px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  transition: transform 0.7s var(--ease-soft);
-  max-width: min(92vw, 320px);
+  padding: 8px 18px;
+  backdrop-filter: blur(10px);
+  color: var(--panel-ink);
+  text-align: center;
+}
+.hud-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; font-weight: 700; font-size: 14px;
+}
+.hud-level-name { font-family: var(--font-display); color: var(--soft-pink); }
+.hud-counter { font-size: 15px; }
+.hud-objective {
+  font-size: 12.5px; opacity: 0; max-height: 0; overflow: hidden;
+  transition: opacity 0.3s var(--ease-soft), max-height 0.3s var(--ease-soft);
+}
+.hud-objective.show { opacity: 0.95; max-height: 30px; margin-top: 4px; }
+
+/* ---------------- شارة اكتمال المستوى ---------------- */
+.level-complete-banner {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(6, 10, 28, 0.55);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.35s var(--ease-soft);
+}
+.level-complete-banner.show { opacity: 1; }
+.lcb-title {
+  font-family: var(--font-display); font-size: 34px; color: var(--warm-white);
+  text-shadow: 0 0 20px rgba(233,185,196,0.8);
+  animation: pop 0.5s var(--ease-soft);
+}
+.lcb-sub { font-size: 30px; margin-top: 6px; }
+@keyframes pop { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* =========================================================
+   أدوات التحكم: Joystick + زر التفاعل
+========================================================== */
+.joystick {
+  position: fixed; z-index: 65;
+  left: calc(22px + var(--safe-inline));
+  bottom: calc(26px + var(--safe-bottom));
+  width: 116px; height: 116px;
+}
+.joystick__base {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: rgba(255,253,249,0.12);
+  border: 2px solid rgba(255,253,249,0.35);
+  touch-action: none;
+  position: relative;
+}
+.joystick__stick {
+  position: absolute; top: 50%; left: 50%;
+  width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--warm-white), var(--soft-pink));
+  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+  transition: transform 0.05s linear;
 }
 
-.achievement-toast.show { transform: translateX(-50%) translateY(0); }
-
-.ach-icon { font-size: 1.6rem; }
-.ach-title { font-weight: 700; font-size: 0.9rem; color: var(--soft-pink); }
-.ach-desc { font-size: 0.78rem; color: var(--panel-ink); opacity: 0.9; }
-
-/* =====================================================================
-   Responsive — Mobile First (اختُبر على 360×800 / 390×844 / 412×915)
-   ===================================================================== */
-@media (min-width: 640px) {
-  .memory-garden { grid-template-columns: repeat(4, 1fr); }
+.interact-btn {
+  position: fixed; z-index: 65;
+  right: calc(24px + var(--safe-inline));
+  bottom: calc(34px + var(--safe-bottom));
+  width: 84px; height: 84px; border-radius: 50%;
+  background: rgba(255,253,249,0.14);
+  border: 2px solid rgba(255,253,249,0.35);
+  color: var(--warm-white);
+  font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.2s var(--ease-soft), background 0.2s var(--ease-soft), box-shadow 0.2s var(--ease-soft);
+}
+.interact-btn.is-active {
+  background: linear-gradient(135deg, var(--soft-pink), var(--dusty-rose));
+  box-shadow: 0 0 0 10px rgba(233,185,196,0.22);
+  transform: scale(1.08);
+  animation: interactPulse 1s ease-in-out infinite;
+}
+@keyframes interactPulse {
+  0%, 100% { box-shadow: 0 0 0 8px rgba(233,185,196,0.22); }
+  50% { box-shadow: 0 0 0 14px rgba(233,185,196,0.08); }
 }
 
-@media (max-width: 360px) {
-  .glass-panel { padding: 16px; }
-  .memory-garden { gap: 10px; margin-top: 88px; }
-  .intro-line { font-size: 0.92rem; }
-  .stage-hint { font-size: 0.8rem; }
-  .hud-item { font-size: 0.76rem; }
+/* =========================================================
+   صندوق الحوار (Dialogue Box) — للذكريات والرسائل
+========================================================== */
+.dialogue-box {
+  position: fixed; z-index: 80;
+  left: 50%; bottom: calc(150px + var(--safe-bottom));
+  transform: translate(-50%, 12px);
+  width: min(92vw, 420px);
+  background: var(--panel-bg-2);
+  border: 1px solid var(--rose-pale);
+  border-radius: 18px;
+  padding: 16px 18px;
+  display: flex; align-items: flex-start; gap: 12px;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease-soft), transform 0.25s var(--ease-soft);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.35);
 }
+.dialogue-box.show { opacity: 1; transform: translate(-50%, 0); }
+.dialogue-box__icon { font-size: 26px; line-height: 1; }
+.dialogue-box__text { flex: 1; font-size: 14.5px; line-height: 1.6; margin: 0 0 8px; }
+.dialogue-box { flex-wrap: wrap; }
+#dialogue-next { margin-inline-start: auto; }
 
-@media (max-height: 620px) {
-  .stage-header { padding: 8px 16px; }
-  .memory-garden { margin-top: 78px; }
-  .gift-scene { padding-bottom: 8vh; }
+/* =========================================================
+   لغز صندوق الهدية
+========================================================== */
+.puzzle-overlay {
+  position: fixed; inset: 0; z-index: 85;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 10, 28, 0.55);
+  padding: 20px;
 }
+.puzzle-panel { max-width: 320px; width: 100%; text-align: center; }
+.puzzle-hint { margin: 0 0 16px; font-size: 14px; }
+.puzzle-buttons { display: flex; justify-content: center; gap: 16px; }
+.puzzle-buttons.shake { animation: shake 0.4s; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+.puzzle-heart {
+  width: 62px; height: 62px; border-radius: 50%;
+  border: 2px solid var(--rose-pale);
+  background: rgba(255,255,255,0.08);
+  font-size: 26px;
+  color: var(--panel-ink);
+}
+.puzzle-heart.is-correct { background: linear-gradient(135deg, var(--soft-pink), var(--dusty-rose)); border-color: transparent; }
+.puzzle-heart:disabled { opacity: 0.9; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* =========================================================
+   بطاقة الرسالة النهائية بعد فتح الهدية
+========================================================== */
+#screen-giftfinal { background: radial-gradient(circle at 50% 30%, #241a3d, var(--night-navy-2)); padding: 20px; }
+.message-card__paper {
+  max-width: 420px; width: 100%;
+  background: var(--panel-bg-2);
+  border: 1px solid var(--rose-pale);
+  border-radius: 20px;
+  padding: 28px 24px;
+  color: var(--ink);
+}
+.message-card__text {
+  white-space: pre-line; font-family: var(--font-display);
+  font-size: 17px; line-height: 1.9; min-height: 90px;
+}
+.message-card__text.is-typing::after { content: '▍'; animation: blink 0.8s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.signature { font-weight: 700; margin: 8px 0 18px; color: var(--dusty-rose); }
+
+/* =========================================================
+   مشغل الفيديو
+========================================================== */
+.modal {
+  position: fixed; inset: 0; z-index: 95;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 10, 28, 0.72);
+  padding: 20px;
+}
+.modal-content { max-width: 380px; width: 100%; text-align: center; }
+.modal-content.small p { margin-top: 0; }
+.confirm-actions { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
+.modal-close {
+  position: absolute; top: 10px; inset-inline-end: 10px;
+  width: 36px; height: 36px; border-radius: 50%;
+  border: none; background: rgba(255,255,255,0.15); color: var(--warm-white);
+  font-size: 16px;
+}
+.video-wrapper { position: relative; width: min(92vw, 520px); }
+#birthday-video { width: 100%; border-radius: 16px; display: block; background: #000; }
+.video-outro { color: var(--warm-white); font-family: var(--font-display); margin-top: 14px; font-size: 16px; }
+#btn-video-continue { margin-top: 14px; }
+
+/* =========================================================
+   Achievement Toast
+========================================================== */
+.achievement-toast {
+  position: fixed; top: calc(70px + var(--safe-top)); left: 50%;
+  transform: translate(-50%, -20px);
+  z-index: 100;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-bg-2);
+  border: 1px solid var(--rose-pale);
+  border-radius: 16px; padding: 12px 18px;
+  opacity: 0; transition: opacity 0.4s var(--ease-soft), transform 0.4s var(--ease-soft);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.3);
+  color: var(--ink);
+}
+.achievement-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.ach-icon { font-size: 26px; }
+.ach-title { font-weight: 700; font-size: 14px; }
+.ach-desc { font-size: 12.5px; opacity: 0.75; }
+
+/* =========================================================
+   استجابة الشاشات الصغيرة جدًا
+========================================================== */
+@media (max-width: 380px) {
+  .joystick { width: 96px; height: 96px; }
+  .interact-btn { width: 72px; height: 72px; font-size: 12px; }
+  .game-title { font-size: 24px; }
 }

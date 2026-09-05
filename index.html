@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>رحلة إلى قلبك ❤️</title>
+<title>Romantic Adventure ❤️</title>
 <meta name="theme-color" content="#0b1330" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,116 +12,93 @@
 </head>
 <body>
 
-  <!-- ============================================================
-       العالم السينمائي ثلاثي الأبعاد (Three.js) — خلفية دائمة
-       طريق ليلي هادئ، نجوم، قمر، مطر، شخصية تمشي تلقائيًا، صندوق هدية 3D
-  ============================================================ -->
-  <canvas id="scene3d-canvas" aria-hidden="true"></canvas>
-
-  <!-- طبقة جزيئات 2D فوق العالم (قلوب/تألق/كونفيتي تفاعلية مع اللعب) -->
+  <!-- طبقة جزيئات عائمة فوق كل شيء (قلوب/تألق/كونفيتي/مطر) -->
   <canvas id="particle-canvas" aria-hidden="true"></canvas>
 
-  <!-- زر الموسيقى العام -->
   <button id="music-toggle" class="icon-btn" aria-label="تشغيل أو إيقاف الموسيقى">🔊</button>
+  <button id="restart-btn" class="icon-btn restart-btn hidden" aria-label="ابدئي من جديد">↺</button>
 
-  <!-- زر تخطي الانيميشن -->
-  <button id="skip-btn" class="icon-btn skip-btn hidden" aria-label="تخطي">تخطي ⏭</button>
-
-  <!-- شريط الحالة — يُنقل تلقائيًا داخل بطاقة عنوان المرحلة النشطة لمنع أي تداخل -->
+  <!-- =========================================================
+       Game HUD — يظهر فقط أثناء اللعب داخل مرحلة
+  ========================================================== -->
   <div id="hud" class="hud hidden" aria-live="polite">
-    <div class="hud-item hud-item--stage" id="hud-stage-name">المرحلة ١</div>
-    <div class="hud-scores">
-      <div class="hud-item">✨ <span id="hud-score">0</span></div>
-      <div class="hud-item">❤️ <span id="hud-hearts">0</span></div>
+    <div class="hud-row">
+      <span class="hud-level-name" id="hud-level-name">LEVEL 01</span>
+      <span class="hud-counter" id="hud-counter">❤️ 0/10</span>
+    </div>
+    <div class="hud-objective" id="hud-objective"></div>
+  </div>
+
+  <!-- شارة "اكتمل المستوى" -->
+  <div id="level-complete-banner" class="level-complete-banner hidden">
+    <div class="lcb-title">LEVEL COMPLETE!</div>
+    <div class="lcb-sub">✨</div>
+  </div>
+
+  <!-- =========================================================
+       أدوات التحكم للموبايل: Joystick + زر التفاعل
+  ========================================================== -->
+  <div id="joystick" class="joystick hidden" aria-hidden="true">
+    <div class="joystick__base">
+      <div class="joystick__stick" id="joystick-stick"></div>
+    </div>
+  </div>
+  <button id="interact-btn" class="interact-btn hidden" aria-label="تفاعل">
+    <span id="interact-btn-label">تفاعل</span>
+  </button>
+
+  <!-- صندوق حوار داخل اللعبة (لعرض الذكريات/الرسائل) -->
+  <div id="dialogue-box" class="dialogue-box hidden">
+    <div class="dialogue-box__icon" id="dialogue-icon">💌</div>
+    <p class="dialogue-box__text" id="dialogue-text"></p>
+    <button id="dialogue-next" class="btn-primary btn-small">التالي ➜</button>
+  </div>
+
+  <!-- لغز صندوق الهدية -->
+  <div id="puzzle-overlay" class="puzzle-overlay hidden">
+    <div class="glass-panel puzzle-panel">
+      <p class="puzzle-hint">اضغطي القلوب بالترتيب الصحيح ١ ٢ ٣</p>
+      <div class="puzzle-buttons" id="puzzle-buttons"></div>
     </div>
   </div>
 
   <main id="app">
 
     <!-- =========================================================
-         شاشة البداية السينمائية
+         شاشة PLAY
     ========================================================== -->
     <section id="screen-intro" class="screen active">
       <div class="intro-content glass-panel">
         <p class="intro-line" id="intro-text">في مكان بعيد… كان فيه ولد عنده أمنية واحدة…</p>
-        <!-- ✏️ عدّل الاسم هنا -->
-        <h1 class="game-title">رحلة إلى قلبك <span class="heart-pulse">❤️</span></h1>
-        <button id="btn-start" class="btn-primary">ابدئي الرحلة ✨</button>
+        <h1 class="game-title">Romantic Adventure <span class="heart-pulse">❤️</span></h1>
+        <button id="btn-play" class="btn-primary btn-play">PLAY ❤️</button>
+        <button id="btn-newgame" class="btn-secondary btn-small hidden">New Game</button>
       </div>
     </section>
 
     <!-- =========================================================
-         المرحلة 1 : جمع القلوب
+         خريطة العالم
     ========================================================== -->
-    <section id="screen-stage1" class="screen">
-      <div class="stage-header glass-panel">
-        <p class="stage-hint">المسي أو اسحبي الشخصية لتجميع القلوب المتساقطة</p>
+    <section id="screen-worldmap" class="screen">
+      <div class="worldmap-header glass-panel">
+        <h2>اختاري المرحلة</h2>
       </div>
-      <canvas id="stage1-canvas"></canvas>
-      <div id="stage1-message" class="floating-message hidden"></div>
+      <div id="worldmap-nodes" class="worldmap-nodes"></div>
     </section>
 
     <!-- =========================================================
-         المرحلة 2 : حديقة الذكريات
+         شاشة اللعب (تُستخدم لكل المراحل الخمس)
     ========================================================== -->
-    <section id="screen-stage2" class="screen">
-      <div class="stage-header glass-panel">
-        <p class="stage-hint">المسي كل عنصر لتكتشفي الذكرى المخبأة بداخله</p>
-      </div>
-      <div id="memory-garden" class="memory-garden"></div>
-      <button id="stage2-continue" class="btn-primary hidden">التالي ➜</button>
-    </section>
-
-    <!-- نافذة الذكرى المنبثقة -->
-    <div id="memory-modal" class="modal hidden">
-      <div class="modal-content glass-panel">
-        <button class="modal-close" id="memory-close" aria-label="إغلاق">✕</button>
-        <div class="memory-icon" id="memory-icon">🌹</div>
-        <img id="memory-image" class="memory-image hidden" alt="" />
-        <p id="memory-text" class="memory-text"></p>
-      </div>
-    </div>
-
-    <!-- =========================================================
-         المرحلة 3 : ليلة المطر
-    ========================================================== -->
-    <section id="screen-stage3" class="screen">
-      <div class="stage-header glass-panel">
-        <p class="stage-hint">تحركي وسط المطر لتقرئي كل رسالة</p>
-      </div>
-      <canvas id="stage3-canvas"></canvas>
-      <div id="rain-message" class="floating-message hidden"></div>
-      <button id="stage3-continue" class="btn-primary hidden">التالي ➜</button>
+    <section id="screen-level" class="screen">
+      <canvas id="level-canvas"></canvas>
     </section>
 
     <!-- =========================================================
-         المرحلة 4 : اصنعي أمنيتك
+         بطاقة الرسالة النهائية بعد فتح الهدية
     ========================================================== -->
-    <section id="screen-stage4" class="screen">
-      <div class="stage-header glass-panel">
-        <p class="stage-hint" id="wish-hint">اختاري نجمة واحدة… واتمني أمنية ⭐</p>
-      </div>
-      <canvas id="stage4-canvas"></canvas>
-      <div id="wish-message" class="floating-message hidden"></div>
-      <button id="stage4-continue" class="btn-primary hidden">التالي ➜</button>
-    </section>
-
-    <!-- =========================================================
-         المرحلة 5 : الهدية — الصندوق أصبح كائنًا ثلاثي الأبعاد
-         داخل عالم Three.js. هذا الزر يبقى كواجهة نظيفة لإمكانية
-         الوصول عبر لوحة المفاتيح، ويُطابق موضع الصندوق في المشهد.
-    ========================================================== -->
-    <section id="screen-stage5" class="screen">
-      <div class="stage-header glass-panel stage-header--minimal">
-      </div>
-      <div class="gift-scene">
-        <button id="gift-box" class="gift-hit-area" aria-label="افتحي صندوق الهدية"></button>
-        <p class="gift-hint" id="gift-hint">اضغطي على صندوق الهدية لفتحه 🎁</p>
-      </div>
-
-      <div id="gift-message" class="gift-final-message message-card hidden">
+    <section id="screen-giftfinal" class="screen">
+      <div id="gift-message" class="gift-final-message message-card">
         <div class="message-card__paper">
-          <!-- ✏️ عدّلي الرسالة من data-text (\n لسطر جديد) -->
           <p id="gift-message-text" class="message-card__text" data-text="كنت ممكن أجيبلك هدية…&#10;بس حسيت إن أحلى هدية أقدر أعملها هي حاجة تفضل عندك ❤️"></p>
           <p class="signature" id="gift-signature">كل سنة وإنتِ حبيبتي ❤️</p>
           <button id="btn-open-video" class="btn-primary">افتحي الهدية 🎁</button>
@@ -130,22 +107,36 @@
     </section>
 
     <!-- =========================================================
-         مشغل الفيديو Fullscreen
+         شاشة النهاية — GAME COMPLETE
     ========================================================== -->
+    <section id="screen-final" class="screen">
+      <div class="final-content glass-panel">
+        <h1 class="game-title final-title">GAME COMPLETE <span class="heart-pulse">❤️</span></h1>
+        <div class="final-stats">
+          <div class="final-stat">❤️ Hearts <span>100%</span></div>
+          <div class="final-stat">💌 Memories <span>100%</span></div>
+          <div class="final-stat">⭐ Stars <span>100%</span></div>
+          <div class="final-stat">🎁 Gift <span>UNLOCKED</span></div>
+        </div>
+        <p class="final-message">كل مرحلة لعبناها كانت حكاية... وكل حكاية كانت إنتِ ❤️</p>
+        <button id="btn-play-again" class="btn-primary btn-small">العب من جديد</button>
+      </div>
+    </section>
+
+    <!-- مشغل الفيديو -->
     <div id="video-modal" class="modal video-modal hidden">
       <div class="video-wrapper">
         <button class="modal-close" id="video-close" aria-label="إغلاق الفيديو">✕</button>
         <!-- ✏️ غيّري اسم ملف الفيديو من js/main.js -> CONFIG.videoFile -->
         <video id="birthday-video" playsinline controls></video>
         <p id="video-outro" class="video-outro hidden">لسه الحكاية مخلصتش… ❤️</p>
+        <button id="btn-video-continue" class="btn-primary hidden">استمري ➜</button>
       </div>
     </div>
 
   </main>
 
-  <!-- =========================================================
-       نافذة الإنجازات المنبثقة (Toast)
-  ========================================================== -->
+  <!-- نافذة الإنجازات المنبثقة -->
   <div id="achievement-toast" class="achievement-toast hidden">
     <div class="ach-icon" id="ach-icon">🏆</div>
     <div class="ach-text">
@@ -153,9 +144,6 @@
       <div class="ach-desc" id="ach-desc"></div>
     </div>
   </div>
-
-  <!-- زر إعادة البدء (يظهر في أي وقت) -->
-  <button id="restart-btn" class="icon-btn restart-btn hidden" aria-label="ابدئي من جديد">↺</button>
 
   <!-- تأكيد إعادة البدء -->
   <div id="restart-confirm" class="modal hidden">
@@ -168,13 +156,12 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/particles.js"></script>
-  <script src="js/physics.js"></script>
   <script src="js/achievements.js"></script>
-  <script src="js/scene3d.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/worldmap.js"></script>
   <script src="js/game.js"></script>
   <script src="js/main.js"></script>
 </body>

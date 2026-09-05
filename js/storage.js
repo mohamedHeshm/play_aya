@@ -1,28 +1,41 @@
 /* =====================================================================
    storage.js — نظام الحفظ (LocalStorage)
-   يحفظ: المرحلة الحالية، النقاط، القلوب، الإنجازات، الإعدادات
+   يحفظ تقدم كل Level على حدة + النقاط + الإنجازات + الإعدادات
    ===================================================================== */
 
 const Storage = (() => {
-  const KEY = 'birthday-game-save-v1';
+  const KEY = 'romantic-adventure-save-v2';
 
   const defaultState = () => ({
-    currentStage: 0,        // 0 = شاشة البداية
-    stagesCompleted: [],    // ["stage1", "stage2", ...]
+    currentLevel: 0,          // 0 = لسه في شاشة PLAY / خريطة اللعبة
+    levelsCompleted: [],      // ["level1", "level2", ...]
     score: 0,
-    heartsCollected: 0,
-    achievements: [],       // achievement ids
-    memoriesDiscovered: [], // memory ids
+    achievements: [],
     musicOn: true,
-    wishStar: null,         // index of chosen star
+    progress: {
+      level1: { hearts: 0 },
+      level2: { memories: [] },
+      level3: { stars: 0 },
+      level4: { memories: [] },
+      level5: { unlocked: false },
+    },
   });
+
+  function migrate(parsed) {
+    const base = defaultState();
+    const merged = { ...base, ...parsed };
+    merged.progress = { ...base.progress, ...(parsed.progress || {}) };
+    for (const k of Object.keys(base.progress)) {
+      merged.progress[k] = { ...base.progress[k], ...(merged.progress[k] || {}) };
+    }
+    return merged;
+  }
 
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      return { ...defaultState(), ...parsed };
+      return migrate(JSON.parse(raw));
     } catch (e) {
       console.warn('Storage load failed, using defaults', e);
       return defaultState();

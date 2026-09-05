@@ -1,72 +1,78 @@
 /* =====================================================================
-   main.js — نقطة الدخول: يربط كل الأنظمة ببعض ويدير الانتقال بين الشاشات
+   main.js — نقطة الدخول: يربط كل الأنظمة ببعض ويدير تدفق اللعبة
    =====================================================================
-   ✏️✏️✏️  أهم الأماكن اللي هتعدّلي فيها:
+   ✏️✏️✏️ أهم الأماكن اللي هتعدّلي فيها:
    - CONFIG.videoFile          -> اسم فيديو عيد الميلاد
    - CONFIG.introLine          -> الجملة الافتتاحية
-   - CONFIG.girlName           -> اسمها (اختياري لو حبيتي تستخدميه بالنص)
    ===================================================================== */
 
 const CONFIG = {
-  // ✏️ ضعي اسم ملف الفيديو الموجود داخل assets/video/
   videoFile: 'assets/video/birthday-video.mp4',
   introLine: 'في مكان بعيد… كان فيه ولد عنده أمنية واحدة…',
-  girlName: '', // اختياري
 };
 
 (function () {
   'use strict';
 
-  const STAGE_ORDER = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'];
-  const STAGE_LABELS = {
-    stage1: 'المرحلة ١',
-    stage2: 'المرحلة ٢',
-    stage3: 'المرحلة ٣',
-    stage4: 'المرحلة ٤',
-    stage5: 'المرحلة ٥',
+  const LEVEL_LABELS = {
+    level1: 'LEVEL 01', level2: 'LEVEL 02', level3: 'LEVEL 03',
+    level4: 'LEVEL 04', level5: 'LEVEL 05',
   };
 
-  let state = Storage.load();
-  let currentScreen = 'intro';
-
-  /* ---------------- عناصر DOM ---------------- */
   const $ = (id) => document.getElementById(id);
+
+  let state = Storage.load();
+  let currentLevelId = null;
+  let activeEngine = null;
+
+  const LEVEL_MODULES = {
+    level1: Game.Level1, level2: Game.Level2, level3: Game.Level3,
+    level4: Game.Level4, level5: Game.Level5,
+  };
 
   const screens = {
     intro: $('screen-intro'),
-    stage1: $('screen-stage1'),
-    stage2: $('screen-stage2'),
-    stage3: $('screen-stage3'),
-    stage4: $('screen-stage4'),
-    stage5: $('screen-stage5'),
+    worldmap: $('screen-worldmap'),
+    level: $('screen-level'),
+    giftfinal: $('screen-giftfinal'),
+    final: $('screen-final'),
   };
 
   const hud = $('hud');
-  const hudScore = $('hud-score');
-  const hudHearts = $('hud-hearts');
-  const hudStageName = $('hud-stage-name');
-
-  const musicToggle = $('music-toggle');
+  const joystick = $('joystick');
+  const interactBtn = $('interact-btn');
   const restartBtn = $('restart-btn');
+  const musicToggle = $('music-toggle');
   const restartConfirm = $('restart-confirm');
 
   /* ---------------- تهيئة الأنظمة ---------------- */
   ParticleSystem.init($('particle-canvas'));
-  World.init($('scene3d-canvas'));
   AudioManager.init();
   AudioManager.setMusicOn(state.musicOn);
   Achievements.init(state.achievements);
+  Achievements.onUnlock(() => persist());
 
   Game.setState(state);
   Game.setCallbacks({
-    onScoreChange: updateHUD,
-    onStageMessage: showFloatingMessage,
-    onStageComplete: handleStageComplete,
-    onAchievement: showAchievementToast,
-    onOpenMemory: openMemoryModal,
+    onScoreChange() { persist(); },
+    onHud(text) { $('hud-counter').textContent = text; },
+    onObjective(text) { showObjective(text); },
+    onStageMessage(text) { showObjective(text, 3200); },
+    onLevelComplete(levelId) { handleLevelComplete(levelId); },
+    onAchievement(id) { showAchievementToast(id); },
+    onPersist() { persist(); },
+    onNearChange(item) { updateInteractButton(item); },
+    onDialogue(opts) { showDialogue(opts); },
+    onEngineReady(engine) { activeEngine = engine; },
+    onGiftInteract(resumeFn) { openGiftPuzzle(resumeFn); },
+    onGiftAlreadyOpen() {
+      setTimeout(() => {
+        if (currentLevelId) { LEVEL_MODULES[currentLevelId].stop(); currentLevelId = null; activeEngine = null; }
+        showScreen('giftfinal');
+        revealGiftMessage(true);
+      }, 300);
+    },
   });
-
-  Achievements.onUnlock(() => persist());
 
   /* ---------------- أول تفاعل من المستخدم لفتح الصوت ---------------- */
   function unlockAudioOnce() {
@@ -95,187 +101,199 @@ const CONFIG = {
     Storage.save(state);
   }
 
-  /* ---------------- الـ HUD ---------------- */
-  function updateHUD(score, hearts) {
-    hudScore.textContent = score;
-    hudHearts.textContent = hearts;
-    persist();
-  }
-
-  function setStageLabel(stageId) {
-    hudStageName.textContent = STAGE_LABELS[stageId] || '';
-  }
-
-  /* ---------------- رسائل عائمة أثناء المراحل ---------------- */
-  function showFloatingMessage(stageId, text) {
-    const map = {
-      stage1: 'stage1-message',
-      stage3: 'rain-message',
-      stage4: 'wish-message',
-    };
-    const el = $(map[stageId]);
-    if (!el) return;
-    el.textContent = text;
-    el.classList.remove('hidden');
-    el.style.animation = 'none';
-    // إعادة تشغيل الأنيميشن
-    void el.offsetWidth;
-    el.style.animation = '';
-  }
-
-  /* ---------------- Achievement Toast ---------------- */
-  let toastTimer = null;
-  function showAchievementToast(id) {
-    const ach = Achievements.getAll()[id];
-    if (!ach) return;
-    AudioManager.sfx('achievement');
-    $('ach-icon').textContent = ach.icon;
-    $('ach-title').textContent = ach.title;
-    $('ach-desc').textContent = ach.desc;
-    const toast = $('achievement-toast');
-    toast.classList.remove('hidden');
-    requestAnimationFrame(() => toast.classList.add('show'));
-    ParticleSystem.emit('sparkle', window.innerWidth / 2, 100, 10, { life: 40, gravity: 0 });
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.classList.add('hidden'), 500);
-    }, 2800);
+  function hasProgress() {
+    return state.levelsCompleted.length > 0 || (state.currentLevel && state.currentLevel > 0);
   }
 
   /* ---------------- التنقل بين الشاشات ---------------- */
-  function goToScreen(name) {
-    // أوقفي منطق الشاشة الحالية
-    stopScreenLogic(currentScreen);
-
+  function showScreen(name) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[name].classList.add('active');
-    currentScreen = name;
-
-    if (STAGE_ORDER.includes(name)) {
-      hud.classList.remove('hidden');
-      setStageLabel(name);
-      // ضمّي الـ HUD داخل بطاقة عنوان المرحلة نفسها لمنع أي تداخل بصري
-      const header = screens[name].querySelector('.stage-header');
-      if (header && hud.parentElement !== header) header.appendChild(hud);
-      state.currentStage = STAGE_ORDER.indexOf(name) + 1;
-      persist();
-    } else {
-      hud.classList.add('hidden');
-    }
-
+    hud.classList.toggle('hidden', name !== 'level');
+    joystick.classList.toggle('hidden', name !== 'level');
+    interactBtn.classList.toggle('hidden', name !== 'level');
     restartBtn.classList.toggle('hidden', name === 'intro');
-
-    if (World && World.isReady !== undefined) World.setScreen(name);
-
-    startScreenLogic(name);
   }
 
-  function startScreenLogic(name) {
-    switch (name) {
-      case 'stage1':
-        Game.Stage1.start($('stage1-canvas'));
-        break;
-      case 'stage2':
-        Game.Stage2.start($('memory-garden'), $('stage2-continue'));
-        break;
-      case 'stage3':
-        Game.Stage3.start($('stage3-canvas'));
-        break;
-      case 'stage4':
-        Game.Stage4.start($('stage4-canvas'));
-        break;
-      case 'stage5':
-        setupGiftStage();
-        break;
+  function goToWorldMap() {
+    if (currentLevelId) {
+      LEVEL_MODULES[currentLevelId].stop();
+      currentLevelId = null;
+      activeEngine = null;
     }
+    showScreen('worldmap');
+    WorldMap.render($('worldmap-nodes'), state, (id) => enterLevel(id));
   }
 
-  function stopScreenLogic(name) {
-    switch (name) {
-      case 'stage1': Game.Stage1.stop(); $('stage1-message').classList.add('hidden'); break;
-      case 'stage2': Game.Stage2.stop(); break;
-      case 'stage3': Game.Stage3.stop(); $('rain-message').classList.add('hidden'); break;
-      case 'stage4': Game.Stage4.stop(); $('wish-message').classList.add('hidden'); break;
-    }
-  }
-
-  function handleStageComplete(stageId) {
-    AudioManager.sfx('stageComplete');
-    if (!state.stagesCompleted.includes(stageId)) {
-      state.stagesCompleted.push(stageId);
-    }
+  function enterLevel(id) {
+    currentLevelId = id;
+    $('hud-counter').textContent = '';
+    $('hud-objective').textContent = '';
+    $('hud-objective').classList.remove('show');
+    $('hud-level-name').textContent = LEVEL_LABELS[id];
+    updateInteractButton(null);
+    showScreen('level');
+    state.currentLevel = parseInt(id.replace('level', ''), 10);
     persist();
+    // ننتظر إطارين لضمان أن أبعاد الـ canvas صحيحة بعد ظهور الشاشة
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      LEVEL_MODULES[id].start($('level-canvas'));
+    }));
+  }
 
-    const idx = STAGE_ORDER.indexOf(stageId);
-    const next = STAGE_ORDER[idx + 1];
+  function handleLevelComplete(levelId) {
+    if (!state.levelsCompleted.includes(levelId)) state.levelsCompleted.push(levelId);
+    persist();
+    AudioManager.sfx('stageComplete');
+    showLevelCompleteBanner();
 
-    if (stageId === 'stage4') {
+    const explorationDone = ['level1', 'level2', 'level3', 'level4'].every(l => state.levelsCompleted.includes(l));
+    if (explorationDone) {
       const first = Achievements.unlock('love_explorer');
       if (first) showAchievementToast('love_explorer');
     }
 
-    if (next) {
-      setTimeout(() => goToScreen(next), 400);
-    }
+    setTimeout(() => goToWorldMap(), 1700);
   }
 
-  /* ---------------- المرحلة ٢: نافذة الذكرى ---------------- */
-  const memoryModal = $('memory-modal');
-  function openMemoryModal(mem) {
-    $('memory-icon').textContent = mem.icon;
-    const img = $('memory-image');
-    if (mem.image) {
-      img.src = mem.image;
-      img.classList.remove('hidden');
-    } else {
-      img.classList.add('hidden');
-    }
-    $('memory-text').textContent = mem.text;
-    memoryModal.classList.remove('hidden');
+  function showLevelCompleteBanner() {
+    const el = $('level-complete-banner');
+    el.classList.remove('hidden');
+    requestAnimationFrame(() => el.classList.add('show'));
+    ParticleSystem.emit('confetti', window.innerWidth / 2, window.innerHeight / 2, 24, { burst: true, life: 70, gravity: 0.12 });
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.classList.add('hidden'), 400);
+    }, 1300);
   }
-  $('memory-close').addEventListener('click', () => memoryModal.classList.add('hidden'));
 
-  $('stage2-continue').addEventListener('click', () => handleStageComplete('stage2'));
+  /* ---------------- الشارة/الهدف العائم ---------------- */
+  let objTimer = null;
+  function showObjective(text, duration = 2600) {
+    const el = $('hud-objective');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(objTimer);
+    objTimer = setTimeout(() => el.classList.remove('show'), duration);
+  }
 
-  $('stage3-continue')?.classList.add('hidden');
-  $('stage4-continue')?.classList.add('hidden');
+  /* ---------------- زر التفاعل + Joystick ---------------- */
+  function updateInteractButton(item) {
+    interactBtn.classList.toggle('is-active', !!item);
+  }
+  interactBtn.addEventListener('click', () => {
+    if (activeEngine) activeEngine.triggerInteract();
+  });
 
-  /* ---------------- المرحلة ٥: صندوق الهدية ---------------- */
-  function setupGiftStage() {
-    const box = $('gift-box');
-    const hint = $('gift-hint');
-    const finalMsg = $('gift-message');
+  (function setupJoystick() {
+    const base = joystick.querySelector('.joystick__base');
+    const stick = $('joystick-stick');
+    let dragging = false;
+    let baseRect = null;
+    let radius = 1;
 
-    const alreadyOpen = state.stagesCompleted.includes('gift-opened');
-
-    if (alreadyOpen) {
-      box.classList.add('opened');
-      hint.classList.add('hidden');
-      finalMsg.classList.remove('hidden');
-      revealGiftMessage(true);
-      if (World && World.isReady) World.markGiftOpened();
+    function start(e) {
+      dragging = true;
+      baseRect = base.getBoundingClientRect();
+      radius = baseRect.width / 2;
+      base.setPointerCapture?.(e.pointerId);
+      move(e);
+    }
+    function move(e) {
+      if (!dragging || !baseRect) return;
+      const cx = baseRect.left + baseRect.width / 2;
+      const cy = baseRect.top + baseRect.height / 2;
+      let dx = e.clientX - cx;
+      let dy = e.clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > radius) { dx = (dx / dist) * radius; dy = (dy / dist) * radius; }
+      stick.style.transform = `translate(${dx}px, ${dy}px)`;
+      if (activeEngine) activeEngine.setInputVector(dx / radius, dy / radius);
+    }
+    function end() {
+      dragging = false;
+      stick.style.transform = 'translate(0, 0)';
+      if (activeEngine) activeEngine.setInputVector(0, 0);
     }
 
-    function tryOpen() {
-      if (box.classList.contains('opened')) return;
-      box.classList.add('opened');
-      Game.Stage5.open(box, () => {
-        hint.classList.add('hidden');
-        finalMsg.classList.remove('hidden');
-        revealGiftMessage(false);
-        if (!state.stagesCompleted.includes('gift-opened')) {
-          state.stagesCompleted.push('gift-opened');
+    base.addEventListener('pointerdown', start);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  })();
+
+  /* ---------------- صندوق الحوار داخل اللعبة ---------------- */
+  function showDialogue({ icon, text, onNext }) {
+    $('dialogue-icon').textContent = icon || '💌';
+    $('dialogue-text').textContent = text;
+    const box = $('dialogue-box');
+    box.classList.remove('hidden');
+    requestAnimationFrame(() => box.classList.add('show'));
+    $('dialogue-next').onclick = () => {
+      AudioManager.sfx('click');
+      box.classList.remove('show');
+      setTimeout(() => box.classList.add('hidden'), 250);
+      if (onNext) onNext();
+    };
+  }
+
+  /* ---------------- لغز صندوق الهدية ---------------- */
+  function openGiftPuzzle() {
+    const container = $('puzzle-buttons');
+    container.innerHTML = '';
+    container.classList.remove('shake');
+    const order = [1, 2, 3].sort(() => Math.random() - 0.5);
+    let expected = 1;
+
+    order.forEach((step) => {
+      const btn = document.createElement('button');
+      btn.className = 'puzzle-heart';
+      btn.textContent = '❤️';
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        if (step === expected) {
+          btn.disabled = true;
+          btn.classList.add('is-correct');
+          AudioManager.sfx('click');
+          expected++;
+          if (expected > 3) setTimeout(succeed, 450);
+        } else {
+          AudioManager.sfx('click');
+          container.classList.add('shake');
+          if (navigator.vibrate) navigator.vibrate(30);
+          setTimeout(() => {
+            container.classList.remove('shake');
+            expected = 1;
+            container.querySelectorAll('.puzzle-heart').forEach(b => {
+              b.disabled = false;
+              b.classList.remove('is-correct');
+            });
+          }, 420);
         }
-        persist();
       });
-    }
+      container.appendChild(btn);
+    });
 
-    box.onclick = tryOpen;
-    box.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') tryOpen(); };
+    $('puzzle-overlay').classList.remove('hidden');
   }
 
-  /* ---------------- رسالة الهدية: بطاقة سينمائية + typewriter RTL ---------------- */
+  function succeed() {
+    $('puzzle-overlay').classList.add('hidden');
+    Game.Level5.onPuzzleSuccess();
+    AudioManager.sfx('giftOpen');
+    const cx = window.innerWidth / 2, cy = window.innerHeight * 0.4;
+    ParticleSystem.emit('confetti', cx, cy, 34, { burst: true, life: 85, gravity: 0.15 });
+    ParticleSystem.emit('heart', cx, cy, 18, { burst: true, life: 75, gravity: 0.05 });
+    ParticleSystem.emit('star', cx, cy, 12, { burst: true, life: 75, gravity: 0.05 });
+    AudioManager.sfx('celebration');
+    setTimeout(() => {
+      if (currentLevelId) { LEVEL_MODULES[currentLevelId].stop(); currentLevelId = null; activeEngine = null; }
+      showScreen('giftfinal');
+      revealGiftMessage(false);
+    }, 900);
+  }
+
+  /* ---------------- بطاقة الرسالة النهائية: typewriter RTL ---------------- */
   let typeTimer = null;
   function revealGiftMessage(instant) {
     const p = $('gift-message-text');
@@ -308,17 +326,14 @@ const CONFIG = {
     videoEl.src = CONFIG.videoFile;
     videoModal.classList.remove('hidden');
     $('video-outro').classList.add('hidden');
-
+    $('btn-video-continue').classList.add('hidden');
     const p = videoEl.play();
-    if (p && p.catch) {
-      p.catch(() => {
-        // المتصفح منع التشغيل التلقائي — المستخدم يضغط زر التشغيل بنفسه
-      });
-    }
+    if (p && p.catch) p.catch(() => { /* المتصفح منع التشغيل التلقائي */ });
   }
 
   videoEl.addEventListener('ended', () => {
     $('video-outro').classList.remove('hidden');
+    $('btn-video-continue').classList.remove('hidden');
     ParticleSystem.emit('heart', window.innerWidth / 2, window.innerHeight / 2, 20, { burst: true, life: 90, gravity: -0.01 });
   });
 
@@ -328,12 +343,83 @@ const CONFIG = {
     if (state.musicOn) AudioManager.playMusic();
   });
 
-  /* ---------------- زر البداية ---------------- */
-  $('intro-text').textContent = CONFIG.introLine;
-  $('btn-start').addEventListener('click', () => {
-    AudioManager.sfx('click');
-    goToScreen('stage1');
+  $('btn-video-continue').addEventListener('click', () => {
+    videoEl.pause();
+    videoModal.classList.add('hidden');
+    goToFinalScreen();
   });
+
+  function goToFinalScreen() {
+    if (!state.levelsCompleted.includes('level5')) state.levelsCompleted.push('level5');
+    persist();
+    showScreen('final');
+    ParticleSystem.emit('confetti', window.innerWidth / 2, window.innerHeight * 0.35, 40, { burst: true, life: 90, gravity: 0.15 });
+    if (state.musicOn) AudioManager.playMusic();
+  }
+
+  /* ---------------- Achievement Toast ---------------- */
+  let toastTimer = null;
+  function showAchievementToast(id) {
+    const ach = Achievements.getAll()[id];
+    if (!ach) return;
+    AudioManager.sfx('achievement');
+    $('ach-icon').textContent = ach.icon;
+    $('ach-title').textContent = ach.title;
+    $('ach-desc').textContent = ach.desc;
+    const toast = $('achievement-toast');
+    toast.classList.remove('hidden');
+    requestAnimationFrame(() => toast.classList.add('show'));
+    ParticleSystem.emit('sparkle', window.innerWidth / 2, 100, 10, { life: 40, gravity: 0 });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.classList.add('hidden'), 500);
+    }, 2800);
+  }
+
+  /* ---------------- شاشة PLAY ---------------- */
+  $('intro-text').textContent = CONFIG.introLine;
+
+  function refreshPlayButton() {
+    if (hasProgress()) {
+      $('btn-play').textContent = 'Continue ❤️';
+      $('btn-newgame').classList.remove('hidden');
+    } else {
+      $('btn-play').textContent = 'PLAY ❤️';
+      $('btn-newgame').classList.add('hidden');
+    }
+  }
+
+  $('btn-play').addEventListener('click', () => {
+    AudioManager.sfx('click');
+    if (hasProgress()) {
+      if (state.levelsCompleted.includes('level5')) { showScreen('final'); return; }
+      const next = WorldMap.nextLevel(state);
+      if (next === 'level1' && state.levelsCompleted.length === 0) enterLevel('level1');
+      else goToWorldMap();
+    } else {
+      enterLevel('level1');
+    }
+  });
+
+  $('btn-newgame').addEventListener('click', () => {
+    AudioManager.sfx('click');
+    resetGame();
+    enterLevel('level1');
+  });
+
+  $('btn-play-again').addEventListener('click', () => {
+    AudioManager.sfx('click');
+    resetGame();
+    showScreen('intro');
+    refreshPlayButton();
+  });
+
+  function resetGame() {
+    state = Storage.reset();
+    Achievements.init([]);
+    Game.setState(state);
+  }
 
   /* ---------------- زر الموسيقى ---------------- */
   function refreshMusicIcon() {
@@ -351,34 +437,14 @@ const CONFIG = {
   restartBtn.addEventListener('click', () => restartConfirm.classList.remove('hidden'));
   $('restart-no').addEventListener('click', () => restartConfirm.classList.add('hidden'));
   $('restart-yes').addEventListener('click', () => {
-    state = Storage.reset();
-    Achievements.init([]);
-    Game.setState(state);
+    resetGame();
     restartConfirm.classList.add('hidden');
-    updateHUD(0, 0);
-    goToScreen('intro');
+    showScreen('intro');
+    refreshPlayButton();
   });
 
-  /* ---------------- استئناف التقدم عند إعادة فتح اللعبة ---------------- */
-  function resume() {
-    updateHUD(state.score, state.heartsCollected);
-    if (state.currentStage && state.currentStage > 0) {
-      const savedStage = STAGE_ORDER[state.currentStage - 1];
-      // لو كانت المرحلة محفوظة مكتملة بالفعل، روحي للي بعدها
-      if (savedStage && state.stagesCompleted.includes(savedStage)) {
-        const idx = STAGE_ORDER.indexOf(savedStage);
-        const next = STAGE_ORDER[idx + 1] || savedStage;
-        goToScreen(next);
-      } else if (savedStage) {
-        goToScreen(savedStage);
-      } else {
-        goToScreen('intro');
-      }
-    } else {
-      goToScreen('intro');
-    }
-  }
-
-  resume();
+  /* ---------------- البداية ---------------- */
+  refreshPlayButton();
+  showScreen('intro');
 
 })();
