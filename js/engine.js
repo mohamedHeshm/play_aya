@@ -1,13 +1,8 @@
 /* =====================================================================
    engine.js — محرك عالم قابل لإعادة الاستخدام لكل المراحل
    =====================================================================
-   تحديثات هذه النسخة:
-   - حركة بعجلة تسارع/تباطؤ حقيقية (مش سرعة ثابتة فجأة)
-   - كاميرا تتبع ناعمة مع حدود صارمة لكل مرحلة (لا مساحات فارغة)
-   - resize يعتمد على ResizeObserver + orientationchange (مش فقط window resize)
-   - عناصر مخفية (hidden) تظهر فقط عند الاقتراب — للعناصر السرية
-   - عناصر عائقة خفيفة (hazard) تبطّئ اللاعب لحظيًا بدل "الخسارة"
-   - رسم متجهي (Vector / Canvas paths) بدل الاعتماد الكامل على الإيموجي
+   الإصدار المُعدّل بالكامل: يعمل بشكل صحيح على الموبايل
+   مع نظام كاميرا متكامل (zoom + world → screen transform)
    ===================================================================== */
 
 const WorldEngine = (() => {
@@ -136,7 +131,7 @@ const WorldEngine = (() => {
     ctx.closePath();
   }
 
-  /* ---------------- الشخصية الافتراضية (متجهية، بدون إيموجي) ---------------- */
+  /* ---------------- الشخصية الافتراضية ---------------- */
   function defaultDrawPlayer(ctx, p) {
     const R = p.radius;
     ctx.save();
@@ -175,10 +170,18 @@ const WorldEngine = (() => {
     ctx.restore();
   }
 
+  /* ============================================================
+     المُنشئ الرئيسي
+  ============================================================ */
   function create(config) {
     const canvas = config.canvas;
     const ctx = canvas.getContext('2d');
 
+    // إعدادات العالم
+    const WORLD_W = config.worldWidth ?? 1400;
+    const WORLD_H = config.worldHeight ?? 1000;
+
+    // سرعة الحركة
     const MAX_SPEED = config.speed ?? 3.4;
     const ACCEL = config.accel ?? 0.55;
     const FRICTION = config.friction ?? 0.82;
@@ -186,15 +189,18 @@ const WorldEngine = (() => {
     const INTERACT_RADIUS = config.interactRadius ?? 76;
     const REVEAL_RADIUS = config.revealRadius ?? 120;
 
+    // حالة العرض
     let dpr = 1;
     let viewW = 0, viewH = 0;
-    let worldW = config.worldWidth ?? 1400;
-    let worldH = config.worldHeight ?? 1000;
-    let camX = 0, camY = 0;
+    let zoom = 1;  // عامل التكبير/التصغير
 
+    // الكاميرا (في إحداثيات العالم)
+    const camera = { x: 0, y: 0 };
+
+    // اللاعب
     let player = {
-      x: worldW / 2,
-      y: worldH / 2,
+      x: WORLD_W / 2,
+      y: WORLD_H / 2,
       vx: 0, vy: 0,
       facing: 1,
       moving: false,
@@ -204,8 +210,8 @@ const WorldEngine = (() => {
     };
 
     if (config.playerStart) {
-      player.x = config.playerStart.fx * worldW;
-      player.y = config.playerStart.fy * worldH;
+      player.x = config.playerStart.fx * WORLD_W;
+      player.y = config.playerStart.fy * WORLD_H;
     }
 
     let items = (config.items || []).map((it, i) => ({
@@ -216,8 +222,8 @@ const WorldEngine = (() => {
       bobPhase: Math.random() * Math.PI * 2,
       id: it.id ?? `item_${i}`,
       ...it,
-      x: (it.fx != null ? it.fx * worldW : it.x),
-      y: (it.fy != null ? it.fy * worldH : it.y),
+      x: (it.fx != null ? it.fx * WORLD_W : it.x),
+      y: (it.fy != null ? it.fy * WORLD_H : it.y),
     }));
 
     let active = false;
@@ -229,17 +235,60 @@ const WorldEngine = (() => {
     let resizeObserver = null;
     let resizeDebounce = null;
 
-    /* ---------------- إعداد الأبعاد ---------------- */
+    /* ============================================================
+       حساب التكبير التلقائي حسب حجم الشاشة
+    ============================================================ */
+    function computeZoom() {
+      const isMobile = viewW < 768 || viewH < 768;
+      const isPortrait = viewH > viewW;
+
+      // على الموبايل نستخدم تكبير لجعل المحتوى مرئياً
+      if (isMobile && isPortrait) {
+        // نريد أن يكون عرض اللاعب حوالي 40-55 بكسل على الشاشة
+        const targetPlayerScreenSize = 44;
+        const zoomFromPlayer = targetPlayerScreenSize / PLAYER_R;
+
+        // نريد أيضاً أن يكون مستوى اللعب مرئياً بشكل جيد
+        // بحيث يظهر حوالي 600-800 وحدة عالمية عرضاً
+        const targetVisibleWorldWidth = Math.min(800, WORLD_W * 0.7);
+        const zoomFromWidth = viewW / targetVisibleWorldWidth;
+
+        // نأخذ التكبير الأنسب (الأصغر عادةً)
+        let z = Math.min(zoomFromPlayer, zoomFromWidth);
+        z = Math.max(z, 0.5);  // لا نترك التكبير صغيراً جداً
+        z = Math.min(z, 2.0);  // ولا كبيراً جداً
+        return z;
+      } else {
+        // سطح المكتب: تكبير يعتمد على العرض
+        const targetVisibleWidth = Math.min(1200, WORLD_W * 0.85);
+        let z = viewW / targetVisibleWidth;
+        z = Math.max(z, 0.6);
+        z = Math.min(z, 1.8);
+        return z;
+      }
+    }
+
+    /* ============================================================
+       إعداد الأبعاد وحجم الشاشة
+    ============================================================ */
     function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const cssW = rect.width;
+      const cssH = rect.height;
+
+      if (cssW === 0 || cssH === 0) return;
+
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      viewW = canvas.clientWidth;
-      viewH = canvas.clientHeight;
-      if (viewW === 0 || viewH === 0) return;
+      viewW = cssW;
+      viewH = cssH;
+
       canvas.width = Math.round(viewW * dpr);
       canvas.height = Math.round(viewH * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      worldW = Math.max(config.worldWidth ?? 1400, viewW + 160);
-      worldH = Math.max(config.worldHeight ?? 1000, viewH + 160);
+
+      // إعادة حساب التكبير
+      zoom = computeZoom();
+
+      // تحديث الكاميرا فوراً
       updateCamera(true);
     }
 
@@ -248,34 +297,58 @@ const WorldEngine = (() => {
       resizeDebounce = setTimeout(resize, 80);
     }
 
-    /* ---------------- لوحة المفاتيح ---------------- */
-    function onKeyDown(e) {
-      keys[e.key.toLowerCase()] = true;
-      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
-        e.preventDefault();
+    /* ============================================================
+       تحويل الإحداثيات: العالم → الشاشة
+    ============================================================ */
+    function worldToScreen(wx, wy) {
+      const sx = (wx - camera.x) * zoom;
+      const sy = (wy - camera.y) * zoom;
+      return { x: sx, y: sy };
+    }
+
+    /* ============================================================
+       تحديث الكاميرا (تتبع اللاعب)
+    ============================================================ */
+    function updateCamera(instant) {
+      // حدود الكاميرا: لا نسمح برؤية خارج العالم
+      const halfW = viewW / zoom / 2;
+      const halfH = viewH / zoom / 2;
+
+      // الهدف: اللاعب في منتصف الشاشة
+      let targetX = player.x;
+      let targetY = player.y;
+
+      // نحدد الكاميرا بحيث لا تخرج عن حدود العالم
+      const minX = halfW;
+      const maxX = WORLD_W - halfW;
+      const minY = halfH;
+      const maxY = WORLD_H - halfH;
+
+      if (maxX < minX) {
+        // العالم أصغر من الشاشة في العرض: نمركز
+        targetX = WORLD_W / 2;
+      } else {
+        targetX = Math.max(minX, Math.min(maxX, targetX));
       }
-      if (e.key === 'Enter' || e.key === ' ' || e.key.toLowerCase() === 'e') {
-        triggerInteract();
+
+      if (maxY < minY) {
+        targetY = WORLD_H / 2;
+      } else {
+        targetY = Math.max(minY, Math.min(maxY, targetY));
+      }
+
+      if (instant) {
+        camera.x = targetX;
+        camera.y = targetY;
+      } else {
+        camera.x += (targetX - camera.x) * 0.12;
+        camera.y += (targetY - camera.y) * 0.12;
       }
     }
-    function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
 
-    function keyboardVector() {
-      let dx = 0, dy = 0;
-      if (keys['arrowleft'] || keys['a']) dx -= 1;
-      if (keys['arrowright'] || keys['d']) dx += 1;
-      if (keys['arrowup'] || keys['w']) dy -= 1;
-      if (keys['arrowdown'] || keys['s']) dy += 1;
-      return { x: dx, y: dy };
-    }
-
-    /* ---------------- Joystick ---------------- */
-    function setInputVector(x, y) {
-      inputVec.x = Math.max(-1, Math.min(1, x));
-      inputVec.y = Math.max(-1, Math.min(1, y));
-    }
-
-    /* ---------------- الحركة (تسارع/تباطؤ) ---------------- */
+    /* ============================================================
+       الحركة
+    ============================================================ */
     function updatePlayer(now) {
       if (paused) { player.moving = false; return; }
       const kv = keyboardVector();
@@ -312,18 +385,44 @@ const WorldEngine = (() => {
 
       player.x += player.vx;
       player.y += player.vy;
-      player.x = Math.max(PLAYER_R, Math.min(worldW - PLAYER_R, player.x));
-      player.y = Math.max(PLAYER_R, Math.min(worldH - PLAYER_R, player.y));
+      player.x = Math.max(PLAYER_R, Math.min(WORLD_W - PLAYER_R, player.x));
+      player.y = Math.max(PLAYER_R, Math.min(WORLD_H - PLAYER_R, player.y));
     }
 
-    function updateCamera(instant) {
-      const targetX = Math.max(0, Math.min(worldW - viewW, player.x - viewW / 2));
-      const targetY = Math.max(0, Math.min(worldH - viewH, player.y - viewH / 2));
-      if (instant) { camX = targetX; camY = targetY; }
-      else { camX += (targetX - camX) * 0.12; camY += (targetY - camY) * 0.12; }
+    /* ============================================================
+       لوحة المفاتيح
+    ============================================================ */
+    function onKeyDown(e) {
+      keys[e.key.toLowerCase()] = true;
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
+      if (e.key === 'Enter' || e.key === ' ' || e.key.toLowerCase() === 'e') {
+        triggerInteract();
+      }
+    }
+    function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
+
+    function keyboardVector() {
+      let dx = 0, dy = 0;
+      if (keys['arrowleft'] || keys['a']) dx -= 1;
+      if (keys['arrowright'] || keys['d']) dx += 1;
+      if (keys['arrowup'] || keys['w']) dy -= 1;
+      if (keys['arrowdown'] || keys['s']) dy += 1;
+      return { x: dx, y: dy };
     }
 
-    /* ---------------- التفاعل والتجميع ---------------- */
+    /* ============================================================
+       Joystick
+    ============================================================ */
+    function setInputVector(x, y) {
+      inputVec.x = Math.max(-1, Math.min(1, x));
+      inputVec.y = Math.max(-1, Math.min(1, y));
+    }
+
+    /* ============================================================
+       التفاعل والتجميع
+    ============================================================ */
     function distTo(it) { return Math.hypot(player.x - it.x, player.y - it.y); }
 
     function updateItems(now) {
@@ -391,97 +490,148 @@ const WorldEngine = (() => {
         glowRadius: it.glowRadius ?? INTERACT_RADIUS,
         bobPhase: Math.random() * Math.PI * 2,
         ...it,
-        x: (it.fx != null ? it.fx * worldW : it.x),
-        y: (it.fy != null ? it.fy * worldH : it.y),
+        x: (it.fx != null ? it.fx * WORLD_W : it.x),
+        y: (it.fy != null ? it.fy * WORLD_H : it.y),
       });
     }
 
-    /* ---------------- الرسم ---------------- */
-    function drawBackground() {
+    /* ============================================================
+       الرسم
+    ============================================================ */
+    function render() {
+      // 1. إعادة ضبط التحويلات
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // 2. مسح الخلفية
+      ctx.clearRect(0, 0, viewW, viewH);
+
+      // 3. رسم الخلفية (في إحداثيات الشاشة)
       if (config.drawBackground) {
-        config.drawBackground(ctx, { camX, camY, viewW, viewH, worldW, worldH });
+        ctx.save();
+        config.drawBackground(ctx, { viewW, viewH, worldW: WORLD_W, worldH: WORLD_H, camera, zoom });
+        ctx.restore();
       } else {
         ctx.fillStyle = '#111';
         ctx.fillRect(0, 0, viewW, viewH);
       }
+
+      // 4. رسم العناصر (يتم تحويل إحداثياتها)
+      // نفرز العناصر حسب العمق (y)
+      const sorted = items.slice().sort((a, b) => a.y - b.y);
+      for (const it of sorted) {
+        if (it.collected || it.found) continue;
+        // تحويل الإحداثيات
+        const screen = worldToScreen(it.x, it.y);
+        // نتحقق من أنها ضمن الشاشة مع هامش
+        const margin = (it.radius ?? 30) * zoom + 30;
+        if (screen.x < -margin || screen.x > viewW + margin ||
+            screen.y < -margin || screen.y > viewH + margin) continue;
+
+        drawItem(it, screen);
+      }
+
+      // 5. رسم اللاعب
+      drawPlayer();
+
+      // 6. رسم عناصر الواجهة الأمامية (إذا وجدت)
+      if (config.drawForeground) {
+        ctx.save();
+        config.drawForeground(ctx, { viewW, viewH, worldW: WORLD_W, worldH: WORLD_H, camera, zoom });
+        ctx.restore();
+      }
+
+      // 7. استدعاء onTick
+      if (config.onTick) config.onTick({ player, camera, zoom });
     }
 
-    function drawItem(it) {
+    function drawItem(it, screen) {
       if (it.hidden && !it.revealed) return;
-      const sx = it.x - camX;
-      const sy = it.y - camY + Math.sin(it.bobPhase) * 5;
-      if (sx < -60 || sx > viewW + 60 || sy < -60 || sy > viewH + 60) return;
+      const sx = screen.x;
+      const sy = screen.y + Math.sin(it.bobPhase) * 5 * zoom;
 
       ctx.save();
       ctx.translate(sx, sy);
+
       if (it.hidden) {
-        const revealAlpha = Math.min(1, ((it.revealRadius ?? REVEAL_RADIUS) - distTo(it)) / 60 + 0.4);
+        const d = distTo(it);
+        const revealAlpha = Math.min(1, ((it.revealRadius ?? REVEAL_RADIUS) - d) / 60 + 0.4);
         ctx.globalAlpha = Math.max(0.35, Math.min(1, revealAlpha));
       }
+
       if (it.glow || (it.kind === 'interact' && it === nearItem)) {
         ctx.shadowColor = it.glowColor || 'rgba(233,185,196,0.6)';
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 16 * zoom;
       }
-      const scale = it.glow ? 1.12 : 1;
+
+      const scale = (it.glow ? 1.12 : 1) * zoom;
       const renderer = SHAPES[it.shape] || config.drawItemShape || null;
       if (renderer) {
         renderer(ctx, it, scale);
       } else if (it.emoji) {
-        ctx.font = `${(it.size ?? it.radius * 1.6) * scale}px sans-serif`;
+        const fontSize = (it.size ?? it.radius * 1.6) * scale;
+        ctx.font = `${fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(it.emoji, 0, 0);
       }
       ctx.restore();
 
+      // تسمية التفاعل
       if (it.kind === 'interact' && it === nearItem) {
         ctx.save();
-        ctx.font = "600 14px Cairo, 'Segoe UI', sans-serif";
+        const fontSize = Math.max(12, 14 * zoom);
+        ctx.font = `600 ${fontSize}px Cairo, 'Segoe UI', sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillStyle = '#FFFDF9';
         ctx.shadowColor = 'rgba(0,0,0,0.5)';
         ctx.shadowBlur = 6;
-        ctx.fillText(config.interactLabel || 'اضغطي للتفاعل', sx, sy - (it.radius ?? 30) - 20);
+        const labelY = sy - (it.radius ?? 30) * zoom - 20 * zoom;
+        ctx.fillText(config.interactLabel || 'اضغطي للتفاعل', sx, labelY);
         ctx.restore();
       }
     }
 
     function drawPlayer() {
-      const sx = player.x - camX;
-      const sy = player.y - camY;
+      const screen = worldToScreen(player.x, player.y);
+      const sx = screen.x;
+      const sy = screen.y;
       const speed = Math.hypot(player.vx, player.vy);
-      const bob = player.moving ? Math.sin(player.walkPhase) * Math.min(4, 2 + speed) : Math.sin(player.idlePhase) * 1.4;
+      const bob = player.moving ? Math.sin(player.walkPhase) * Math.min(4, 2 + speed) * zoom : Math.sin(player.idlePhase) * 1.4 * zoom;
+      const R = PLAYER_R * zoom;
 
+      // الظل
       ctx.save();
       ctx.beginPath();
-      ctx.ellipse(sx, sy + PLAYER_R * 0.85, PLAYER_R * 0.78, PLAYER_R * 0.26, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy + R * 0.85, R * 0.78, R * 0.26, 0, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(6, 10, 28, 0.32)';
       ctx.fill();
       ctx.restore();
 
+      // اللاعب
       const painter = config.drawPlayer || defaultDrawPlayer;
-      painter(ctx, { sx, sy, bob, facing: player.facing, moving: player.moving, radius: PLAYER_R });
+      painter(ctx, {
+        sx, sy, bob,
+        facing: player.facing,
+        moving: player.moving,
+        radius: R
+      });
     }
 
-    function render() {
-      drawBackground();
-      const sorted = items.slice().sort((a, b) => a.y - b.y);
-      for (const it of sorted) if (!it.collected && !it.found) drawItem(it);
-      drawPlayer();
-      if (config.drawForeground) config.drawForeground(ctx, { camX, camY, viewW, viewH, worldW, worldH });
-    }
-
+    /* ============================================================
+       الحلقة الرئيسية
+    ============================================================ */
     function loop(now) {
       if (!active) return;
       updatePlayer(now);
       updateCamera(false);
       updateItems(now);
       render();
-      if (config.onTick) config.onTick({ player, camX, camY });
       raf = requestAnimationFrame(loop);
     }
 
-    /* ---------------- التحكم العام ---------------- */
+    /* ============================================================
+       التحكم العام
+    ============================================================ */
     function start() {
       active = true;
       paused = false;
@@ -489,6 +639,7 @@ const WorldEngine = (() => {
       window.addEventListener('keydown', onKeyDown);
       window.addEventListener('keyup', onKeyUp);
       window.addEventListener('orientationchange', scheduleResize);
+      window.visualViewport?.addEventListener('resize', scheduleResize);
       if (window.ResizeObserver) {
         resizeObserver = new ResizeObserver(scheduleResize);
         resizeObserver.observe(canvas);
@@ -506,6 +657,7 @@ const WorldEngine = (() => {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('orientationchange', scheduleResize);
       window.removeEventListener('resize', scheduleResize);
+      window.visualViewport?.removeEventListener('resize', scheduleResize);
       if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
       for (const k in keys) keys[k] = false;
       inputVec = { x: 0, y: 0 };

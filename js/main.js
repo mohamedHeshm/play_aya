@@ -126,7 +126,6 @@ const CONFIG = {
     showScreen('worldmap');
     WorldMap.render($('worldmap-nodes'), state, (id) => enterLevel(id));
   }
-
   function enterLevel(id) {
     currentLevelId = id;
     $('hud-counter').textContent = '';
@@ -140,9 +139,15 @@ const CONFIG = {
     showScreen('level');
     state.currentLevel = parseInt(id.replace('level', ''), 10);
     persist();
-    // ننتظر إطارين لضمان أن أبعاد الـ canvas صحيحة بعد ظهور الشاشة
+
+    // ننتظر حتى يظهر canvas ثم نبدأ
+    const canvas = $('level-canvas');
+    // تأكد من أن canvas يملأ الشاشة
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      LEVEL_MODULES[id].start($('level-canvas'));
+      LEVEL_MODULES[id].start(canvas);
       requestAnimationFrame(() => levelScreen.classList.remove('screen-fading'));
     }));
   }

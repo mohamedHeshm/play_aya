@@ -198,25 +198,36 @@ const Game = (() => {
   /* =====================================================================
      LEVEL 2 — تحت المطر
      ===================================================================== */
+  /* =====================================================================
+     LEVEL 2 — تحت المطر (خلفية مُعدّلة للشاشات الصغيرة)
+     ===================================================================== */
   const Level2 = (() => {
     let engine = null;
     let found = 0;
 
     function bg(ctx, view) {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const g = ctx.createLinearGradient(0, 0, 0, view.viewH);
-      g.addColorStop(0, '#0b1330');
-      g.addColorStop(1, '#1c2b4a');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, view.viewW, view.viewH);
+      // view يحتوي على: viewW, viewH, worldW, worldH, camera, zoom
+      const { viewW, viewH } = view;
 
-      const roadY = view.viewH * 0.62;
+      ctx.save();
+      // تأكد من أننا نرسم من 0,0 (إحداثيات الشاشة)
+
+      // السماء
+      const g = ctx.createLinearGradient(0, 0, 0, viewH);
+      g.addColorStop(0, '#0b1330');
+      g.addColorStop(0.5, '#1a2a4a');
+      g.addColorStop(1, '#0d1a30');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, viewW, viewH);
+
+      // الطريق (الجزء السفلي)
+      const roadY = viewH * 0.62;
       ctx.fillStyle = 'rgba(10,14,30,0.65)';
-      ctx.fillRect(0, roadY, view.viewW, view.viewH - roadY);
+      ctx.fillRect(0, roadY, viewW, viewH - roadY);
+
+      // برك الماء (موزعة في إحداثيات الشاشة)
       for (let i = 0; i < 10; i++) {
-        const wx = (i * 210) % view.worldW;
-        const sx = wx - view.camX;
+        const sx = (i * 210 + 50) % viewW;
         const puddleY = roadY + 30 + (i % 3) * 18;
         ctx.save();
         ctx.globalAlpha = 0.25;
@@ -230,8 +241,21 @@ const Game = (() => {
         ctx.fill();
         ctx.restore();
       }
+
+      // خطوط أفقية خفيفة للإيحاء بالعمق
+      for (let i = 0; i < 5; i++) {
+        const y = roadY - 40 - i * 30;
+        ctx.save();
+        ctx.globalAlpha = 0.04;
+        ctx.fillStyle = '#FFFDF9';
+        ctx.fillRect(0, y, viewW, 1);
+        ctx.restore();
+      }
+
       ctx.restore();
     }
+
+    // ... باقي الكود كما هو
 
     function drawUmbrella(ctx, it) {
       const s = it.radius * 1.2;
