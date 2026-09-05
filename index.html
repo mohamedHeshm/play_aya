@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>رحلة إلى قلبك ❤️</title>
+<meta name="theme-color" content="#1a1035" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       طبقة الخلفية الليلية الدائمة (Parallax Layers)
+       تظهر خلف كل الشاشات طوال اللعبة
+  ============================================================ -->
+  <div id="bg-parallax" aria-hidden="true">
+    <div class="layer" id="layer-sky"></div>
+    <div class="layer" id="layer-stars-far"></div>
+    <div class="layer" id="layer-stars-near"></div>
+    <canvas id="particle-canvas"></canvas>
+    <div class="layer" id="layer-deco"></div>
+  </div>
+
+  <!-- زر الموسيقى العام -->
+  <button id="music-toggle" class="icon-btn" aria-label="تشغيل أو إيقاف الموسيقى">🔊</button>
+
+  <!-- زر تخطي الانيميشن -->
+  <button id="skip-btn" class="icon-btn skip-btn hidden" aria-label="تخطي">تخطي ⏭</button>
+
+  <!-- شريط الحالة العلوي (Score / Stage) -->
+  <div id="hud" class="hud hidden" aria-live="polite">
+    <div class="hud-item">✨ <span id="hud-score">0</span></div>
+    <div class="hud-item">❤️ <span id="hud-hearts">0</span></div>
+    <div class="hud-item" id="hud-stage-name">المرحلة 1</div>
+  </div>
+
+  <main id="app">
+
+    <!-- =========================================================
+         شاشة البداية السينمائية
+    ========================================================== -->
+    <section id="screen-intro" class="screen active">
+      <div class="stars-overlay"></div>
+      <div class="intro-content glass-panel">
+        <p class="intro-line" id="intro-text">في مكان بعيد… كان فيه ولد عنده أمنية واحدة…</p>
+        <!-- ✏️ عدّل الاسم هنا -->
+        <h1 class="game-title">رحلة إلى قلبك <span class="heart-pulse">❤️</span></h1>
+        <button id="btn-start" class="btn-primary">ابدئي الرحلة ✨</button>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         المرحلة 1 : جمع القلوب
+    ========================================================== -->
+    <section id="screen-stage1" class="screen">
+      <div class="stage-header glass-panel">
+        <h2>المرحلة ١ · اجمعي القلوب ❤️</h2>
+        <p class="stage-hint">المسي أو اسحبي الشخصية لتجميع القلوب المتساقطة</p>
+      </div>
+      <canvas id="stage1-canvas"></canvas>
+      <div id="stage1-message" class="floating-message hidden"></div>
+    </section>
+
+    <!-- =========================================================
+         المرحلة 2 : حديقة الذكريات
+    ========================================================== -->
+    <section id="screen-stage2" class="screen">
+      <div class="stage-header glass-panel">
+        <h2>المرحلة ٢ · حديقة الذكريات 🌹</h2>
+        <p class="stage-hint">المسي كل عنصر لتكتشفي الذكرى المخبأة بداخله</p>
+      </div>
+      <div id="memory-garden" class="memory-garden"></div>
+      <button id="stage2-continue" class="btn-primary hidden">التالي ➜</button>
+    </section>
+
+    <!-- نافذة الذكرى المنبثقة -->
+    <div id="memory-modal" class="modal hidden">
+      <div class="modal-content glass-panel">
+        <button class="modal-close" id="memory-close" aria-label="إغلاق">✕</button>
+        <div class="memory-icon" id="memory-icon">🌹</div>
+        <img id="memory-image" class="memory-image hidden" alt="" />
+        <p id="memory-text" class="memory-text"></p>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         المرحلة 3 : ليلة المطر
+    ========================================================== -->
+    <section id="screen-stage3" class="screen">
+      <div class="stage-header glass-panel">
+        <h2>المرحلة ٣ · ليلة المطر 🌧️</h2>
+        <p class="stage-hint">تحركي وسط المطر لتقرئي كل رسالة</p>
+      </div>
+      <canvas id="stage3-canvas"></canvas>
+      <div id="rain-message" class="floating-message hidden"></div>
+      <button id="stage3-continue" class="btn-primary hidden">التالي ➜</button>
+    </section>
+
+    <!-- =========================================================
+         المرحلة 4 : اصنعي أمنيتك
+    ========================================================== -->
+    <section id="screen-stage4" class="screen">
+      <div class="stage-header glass-panel">
+        <h2>المرحلة ٤ · اصنعي أمنيتك ⭐</h2>
+        <p class="stage-hint" id="wish-hint">اختاري نجمة واحدة… واتمني أمنية ⭐</p>
+      </div>
+      <canvas id="stage4-canvas"></canvas>
+      <div id="wish-message" class="floating-message hidden"></div>
+      <button id="stage4-continue" class="btn-primary hidden">التالي ➜</button>
+    </section>
+
+    <!-- =========================================================
+         المرحلة 5 : الهدية
+    ========================================================== -->
+    <section id="screen-stage5" class="screen">
+      <div class="gift-scene">
+        <div class="gift-box" id="gift-box" role="button" tabindex="0" aria-label="افتحي صندوق الهدية">
+          <div class="gift-lid"></div>
+          <div class="gift-body"></div>
+          <div class="gift-ribbon-v"></div>
+          <div class="gift-ribbon-h"></div>
+          <div class="gift-bow">🎀</div>
+        </div>
+        <p class="gift-hint" id="gift-hint">اضغطي على الهدية لفتحها 🎁</p>
+      </div>
+
+      <div id="gift-message" class="gift-final-message glass-panel hidden">
+        <!-- ✏️ عدّلي الرسالة هنا -->
+        <p>كنت ممكن أجيبلك هدية…<br>بس حسيت إن أحلى هدية أقدر أعملها هي حاجة تفضل عندك ❤️</p>
+        <p class="signature">كل سنة وإنتِ حبيبتي ❤️</p>
+        <button id="btn-open-video" class="btn-primary">افتحي الهدية 🎁</button>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         مشغل الفيديو Fullscreen
+    ========================================================== -->
+    <div id="video-modal" class="modal video-modal hidden">
+      <div class="video-wrapper">
+        <button class="modal-close" id="video-close" aria-label="إغلاق الفيديو">✕</button>
+        <!-- ✏️ غيّري اسم ملف الفيديو من js/main.js -> CONFIG.videoFile -->
+        <video id="birthday-video" playsinline controls></video>
+        <p id="video-outro" class="video-outro hidden">لسه الحكاية مخلصتش… ❤️</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- =========================================================
+       نافذة الإنجازات المنبثقة (Toast)
+  ========================================================== -->
+  <div id="achievement-toast" class="achievement-toast hidden">
+    <div class="ach-icon" id="ach-icon">🏆</div>
+    <div class="ach-text">
+      <div class="ach-title" id="ach-title">إنجاز جديد</div>
+      <div class="ach-desc" id="ach-desc"></div>
+    </div>
+  </div>
+
+  <!-- زر إعادة البدء (يظهر في أي وقت) -->
+  <button id="restart-btn" class="icon-btn restart-btn hidden" aria-label="ابدئي من جديد">↺</button>
+
+  <!-- تأكيد إعادة البدء -->
+  <div id="restart-confirm" class="modal hidden">
+    <div class="modal-content glass-panel small">
+      <p>هل تريدين حذف التقدم والبدء من جديد؟</p>
+      <div class="confirm-actions">
+        <button id="restart-yes" class="btn-secondary">نعم، ابدئي من جديد</button>
+        <button id="restart-no" class="btn-primary">لا، استمري</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/physics.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
