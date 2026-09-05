@@ -60,6 +60,7 @@ const CONFIG = {
     onStageMessage(text) { showObjective(text, 3200); },
     onLevelComplete(levelId) { handleLevelComplete(levelId); },
     onAchievement(id) { showAchievementToast(id); },
+    onSecretFound() { showSecretToast(); },
     onPersist() { persist(); },
     onNearChange(item) { updateInteractButton(item); },
     onDialogue(opts) { showDialogue(opts); },
@@ -113,6 +114,7 @@ const CONFIG = {
     joystick.classList.toggle('hidden', name !== 'level');
     interactBtn.classList.toggle('hidden', name !== 'level');
     restartBtn.classList.toggle('hidden', name === 'intro');
+    if (name !== 'level') ParticleSystem.setAmbientMode('petals');
   }
 
   function goToWorldMap() {
@@ -132,12 +134,16 @@ const CONFIG = {
     $('hud-objective').classList.remove('show');
     $('hud-level-name').textContent = LEVEL_LABELS[id];
     updateInteractButton(null);
+
+    const levelScreen = screens.level;
+    levelScreen.classList.add('screen-fading');
     showScreen('level');
     state.currentLevel = parseInt(id.replace('level', ''), 10);
     persist();
     // ننتظر إطارين لضمان أن أبعاد الـ canvas صحيحة بعد ظهور الشاشة
     requestAnimationFrame(() => requestAnimationFrame(() => {
       LEVEL_MODULES[id].start($('level-canvas'));
+      requestAnimationFrame(() => levelScreen.classList.remove('screen-fading'));
     }));
   }
 
@@ -375,6 +381,22 @@ const CONFIG = {
       toast.classList.remove('show');
       setTimeout(() => toast.classList.add('hidden'), 500);
     }, 2800);
+  }
+
+  function showSecretToast() {
+    AudioManager.sfx('achievement');
+    $('ach-icon').textContent = '🔎';
+    $('ach-title').textContent = 'سر مخبأ';
+    $('ach-desc').textContent = 'لقيتي حاجة محدش يعرفها غيرك';
+    const toast = $('achievement-toast');
+    toast.classList.remove('hidden');
+    requestAnimationFrame(() => toast.classList.add('show'));
+    ParticleSystem.emit('sparkle', window.innerWidth / 2, 100, 10, { life: 40, gravity: 0 });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.classList.add('hidden'), 500);
+    }, 2400);
   }
 
   /* ---------------- شاشة PLAY ---------------- */

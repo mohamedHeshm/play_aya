@@ -12,6 +12,7 @@ const Achievements = (() => {
     wish_maker: { icon: '⭐', title: 'Wish Maker', desc: 'جمعتي كل النجوم' },
     love_explorer: { icon: '🏆', title: 'Love Explorer', desc: 'خلصتي كل المراحل' },
     birthday_surprise: { icon: '🎁', title: 'Birthday Surprise', desc: 'فتحتي الهدية' },
+    secret_finder: { icon: '🔎', title: 'Secret Finder', desc: 'اكتشفتي أول سر مخبأ' },
   };
 
   let unlocked = new Set();

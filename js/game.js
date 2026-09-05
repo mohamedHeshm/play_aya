@@ -22,6 +22,8 @@ const Game = (() => {
     { id: 'm8', icon: '🌟', text: 'اللحظة اللي حسيت فيها إني بحبك بجد.' },
   ];
 
+  const SECRET_MEMORY = { id: 'ms', icon: '🕊️', text: 'وسر صغير مش هقوله لحد… إنتِ أحلى حاجة حصلتلي في الدنيا دي.' };
+
   const RAIN_MESSAGES = [
     { id: 'r1', text: 'في نص الزحمة... بفكر فيكِ.' },
     { id: 'r2', text: 'مهما كانت الدنيا تقيلة، صوتك بيهدّيني.' },
@@ -29,6 +31,7 @@ const Game = (() => {
     { id: 'r4', text: 'وكل ما الدنيا تمطر، بتذكر إن معاكِ بتبقى أجمل.' },
   ];
 
+  const SHELTER_MESSAGE = 'تحت المطر برضه، جنبك بيبقى أدفى مكان في الدنيا ❤️';
   const WISH_RESULT_MESSAGE = 'أمنيتي الوحيدة إنك تفضلي مبسوطة، دايمًا، جنبي أو من بعيد ❤️';
 
   let state = null;
@@ -43,6 +46,16 @@ const Game = (() => {
   function unlockAchievement(id) {
     const first = Achievements.unlock(id);
     if (first && callbacks.onAchievement) callbacks.onAchievement(id);
+  }
+  function markSecret(levelKey, id) {
+    const arr = state.progress[levelKey].secrets || (state.progress[levelKey].secrets = []);
+    if (!arr.includes(id)) {
+      arr.push(id);
+      addScore(40);
+      unlockAchievement('secret_finder');
+      if (callbacks.onSecretFound) callbacks.onSecretFound();
+      if (callbacks.onPersist) callbacks.onPersist();
+    }
   }
 
   function randScatter(n, margin = 0.14) {
@@ -61,24 +74,37 @@ const Game = (() => {
     return pts;
   }
 
-  /* =====================================================================
-     خلفيات زخرفية بسيطة (2.5D) لكل مرحلة
-     ===================================================================== */
-  function skyBg(top, bottom) {
-    return (ctx, view) => {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const g = ctx.createLinearGradient(0, 0, 0, view.viewH);
-      g.addColorStop(0, top);
-      g.addColorStop(1, bottom);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, view.viewH ? view.viewW : 0, view.viewH);
-      ctx.restore();
-    };
+  /* ---------------- زخارف متجهية بسيطة لكل خلفية (بدون إيموجي) ---------------- */
+  function decoDot(ctx, sx, sy, r, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, r, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCloudBand(ctx, view, factor, y, color, alpha, seed) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    for (let i = 0; i < 5; i++) {
+      const wx = (i * 420 + seed * 90) % (view.worldW + 400) - 200;
+      const sx = wx - view.camX * factor;
+      const sy = y + Math.sin(i * 1.7) * 10;
+      if (sx < -160 || sx > view.viewW + 160) continue;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, 90, 26, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx + 55, sy + 6, 60, 20, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx - 55, sy + 8, 55, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /* =====================================================================
-     LEVEL 1 — جمع القلوب
+     LEVEL 1 — أول لقاء: جمع القلوب
      ===================================================================== */
   const Level1 = (() => {
     let engine = null;
@@ -94,39 +120,50 @@ const Game = (() => {
       ctx.fillRect(0, 0, view.viewW, view.viewH);
       ctx.restore();
 
-      // زهور أرضية بسيطة (Parallax خفيف حسب موقع الكاميرا)
+      drawCloudBand(ctx, view, 0.35, view.viewH * 0.18, 'rgba(255,253,249,0.06)', 1, 1);
+
       ctx.save();
-      ctx.globalAlpha = 0.5;
-      for (let i = 0; i < 26; i++) {
+      for (let i = 0; i < 22; i++) {
         const wx = (i * 137) % view.worldW;
         const wy = (i * 91 + 40) % view.worldH;
         const sx = wx - view.camX * 0.9;
         const sy = wy - view.camY * 0.9;
-        ctx.font = '22px sans-serif';
-        ctx.fillText(i % 3 === 0 ? '🌸' : (i % 3 === 1 ? '🌿' : '🌷'), sx, sy);
+        decoDot(ctx, sx, sy, 5, i % 3 === 0 ? '#E8C8C8' : '#B98B8B', 0.35);
       }
       ctx.restore();
     }
 
     function start(canvas) {
       collected = state.progress.level1.hearts || 0;
+      const secretFound = (state.progress.level1.secrets || []).includes('h_secret');
       const items = randScatter(HEARTS_TARGET).map((p, i) => ({
         id: `heart_${i}`,
-        kind: 'collect',
-        emoji: Math.random() < 0.15 ? '💖' : '❤️',
+        kind: 'collect', shape: 'heart',
         fx: p.fx, fy: p.fy,
-        radius: 26, glowRadius: 90,
+        radius: 24, glowRadius: 90,
         special: Math.random() < 0.15,
-        found: i < collected, // استكمال التقدم المحفوظ
+        found: i < collected,
       }));
+
+      items.push({
+        id: 'h_secret', kind: 'collect', shape: 'heart',
+        fx: 0.06, fy: 0.9, radius: 20, glowRadius: 90,
+        special: true, hidden: true, revealRadius: 110,
+        found: secretFound,
+      });
+
+      ParticleSystem.setAmbientMode('petals');
 
       engine = WorldEngine.create({
         canvas,
         worldWidth: 1500, worldHeight: 1050,
-        playerEmoji: '💗',
         drawBackground: bg,
         items,
         onCollect(it) {
+          if (it.id === 'h_secret') {
+            markSecret('level1', 'h_secret');
+            return;
+          }
           collected++;
           state.progress.level1.hearts = collected;
           addScore(it.special ? 50 : 10);
@@ -159,7 +196,7 @@ const Game = (() => {
   })();
 
   /* =====================================================================
-     LEVEL 2 — المطر والذكريات
+     LEVEL 2 — تحت المطر
      ===================================================================== */
   const Level2 = (() => {
     let engine = null;
@@ -174,7 +211,6 @@ const Game = (() => {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, view.viewW, view.viewH);
 
-      // شارع مبلل بانعكاسات بسيطة
       const roadY = view.viewH * 0.62;
       ctx.fillStyle = 'rgba(10,14,30,0.65)';
       ctx.fillRect(0, roadY, view.viewW, view.viewH - roadY);
@@ -197,28 +233,82 @@ const Game = (() => {
       ctx.restore();
     }
 
+    function drawUmbrella(ctx, it) {
+      const s = it.radius * 1.2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.1, s, Math.PI, 0);
+      const grad = ctx.createLinearGradient(-s, -s, s, 0);
+      grad.addColorStop(0, '#E9B9C4');
+      grad.addColorStop(1, '#B98B8B');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.1);
+      ctx.lineTo(0, s * 0.7);
+      ctx.strokeStyle = '#FFFDF9';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function start(canvas) {
       found = state.progress.level2.memories.length;
+      const shelterFound = (state.progress.level2.secrets || []).includes('shelter');
+
       const items = RAIN_MESSAGES.map((m, i) => {
         const pts = randScatter(RAIN_MESSAGES.length, 0.18)[i];
         return {
-          id: m.id, kind: 'interact', emoji: '💌',
-          fx: pts.fx, fy: pts.fy, radius: 26,
+          id: m.id, kind: 'interact', shape: 'letter',
+          fx: pts.fx, fy: pts.fy, radius: 24,
           data: m, found: state.progress.level2.memories.includes(m.id),
         };
       });
 
+      items.push({
+        id: 'shelter', kind: 'interact',
+        fx: 0.5, fy: 0.28, radius: 30,
+        found: shelterFound,
+        drawCustom: drawUmbrella,
+      });
+
+      items.push({
+        id: 'gust', kind: 'hazard', fx: 0.75, fy: 0.55, radius: 46, slowMs: 700, hidden: false,
+      });
+
+      ParticleSystem.setAmbientMode('petals');
+
       engine = WorldEngine.create({
         canvas,
         worldWidth: 1600, worldHeight: 950,
-        playerEmoji: '🚶‍♀️',
         interactLabel: 'اضغطي للقراءة',
         drawBackground: bg,
+        drawItemShape(ctx, it, scale) {
+          if (it.drawCustom) { it.drawCustom(ctx, it, scale); return; }
+          WorldEngine.SHAPES.letter(ctx, it, scale);
+        },
         items,
         onTick() { ParticleSystem.emitRain(1); },
+        onHazard() {
+          if (callbacks.onStageMessage) callbacks.onStageMessage('الريح قوية شوية هنا… استني لحظة 🌬️');
+        },
         onNearChange(item) { if (callbacks.onNearChange) callbacks.onNearChange(item); },
         onInteract(item) {
           engine.setPaused(true);
+          if (item.id === 'shelter') {
+            if (callbacks.onDialogue) {
+              callbacks.onDialogue({
+                icon: '☂️',
+                text: SHELTER_MESSAGE,
+                onNext: () => {
+                  engine.markFound('shelter');
+                  markSecret('level2', 'shelter');
+                  engine.setPaused(false);
+                },
+              });
+            }
+            return;
+          }
           if (callbacks.onDialogue) {
             callbacks.onDialogue({
               icon: '💌',
@@ -308,21 +398,34 @@ const Game = (() => {
       collected = state.progress.level3.stars || 0;
       const worldW = 1300, worldH = 950;
       makeAmbient(worldW, worldH);
+      const secretFound = (state.progress.level3.secrets || []).includes('s_secret');
 
       const items = randScatter(STARS_TARGET, 0.16).map((p, i) => ({
-        id: `star_${i}`, kind: 'collect', emoji: '⭐',
-        fx: p.fx, fy: p.fy, radius: 22, glowRadius: 90,
+        id: `star_${i}`, kind: 'collect', shape: 'star',
+        fx: p.fx, fy: p.fy, radius: 20, glowRadius: 90,
         found: i < collected,
       }));
+
+      items.push({
+        id: 's_secret', kind: 'collect', shape: 'star', rare: true,
+        fx: 0.5, fy: 0.15, radius: 18, glowRadius: 90,
+        hidden: true, revealRadius: 130,
+        found: secretFound,
+      });
+
+      ParticleSystem.setAmbientMode('none');
 
       engine = WorldEngine.create({
         canvas,
         worldWidth: worldW, worldHeight: worldH,
-        playerEmoji: '💗',
         interactLabel: 'اضغطي لتمني أمنية',
         drawBackground: bg,
         items,
         onCollect(it) {
+          if (it.id === 's_secret') {
+            markSecret('level3', 's_secret');
+            return;
+          }
           collected++;
           state.progress.level3.stars = collected;
           addScore(20);
@@ -359,8 +462,8 @@ const Game = (() => {
       if (!engine) return;
       if (engine.items.some(i => i.id === 'special_star')) return;
       engine.addItem({
-        id: 'special_star', kind: 'interact', emoji: '🌟',
-        fx: 0.5, fy: 0.42, radius: 30,
+        id: 'special_star', kind: 'interact', shape: 'star', rare: true,
+        fx: 0.5, fy: 0.42, radius: 26,
       });
       if (callbacks.onObjective) callbacks.onObjective('لاقي النجمة الخاصة وتمني أمنية 🌟');
       unlockAchievement('wish_maker');
@@ -390,34 +493,41 @@ const Game = (() => {
       g.addColorStop(1, '#513a4a');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, view.viewW, view.viewH);
-      ctx.globalAlpha = 0.4;
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 18; i++) {
         const wx = (i * 173) % view.worldW;
         const wy = (i * 121 + 60) % view.worldH;
         const sx = wx - view.camX * 0.85;
         const sy = wy - view.camY * 0.85;
-        ctx.font = '20px sans-serif';
-        ctx.fillText(i % 2 === 0 ? '🌿' : '🌸', sx, sy);
+        decoDot(ctx, sx, sy, 4.5, i % 2 === 0 ? '#8fbf8f' : '#E8C8C8', 0.3);
       }
-      ctx.globalAlpha = 1;
       ctx.restore();
     }
 
     function start(canvas) {
       found = state.progress.level4.memories.length;
+      const secretFound = (state.progress.level4.secrets || []).includes('ms');
+
       const items = MEMORIES.map((m, i) => {
         const p = randScatter(MEMORIES.length, 0.16)[i];
         return {
-          id: m.id, kind: 'interact', emoji: m.icon,
-          fx: p.fx, fy: p.fy, radius: 26,
+          id: m.id, kind: 'interact', shape: 'letter',
+          fx: p.fx, fy: p.fy, radius: 24,
           data: m, found: state.progress.level4.memories.includes(m.id),
         };
       });
 
+      items.push({
+        id: SECRET_MEMORY.id, kind: 'interact', shape: 'letter',
+        fx: 0.5, fy: 0.5, radius: 24,
+        data: SECRET_MEMORY, hidden: true, revealRadius: 130,
+        found: secretFound,
+      });
+
+      ParticleSystem.setAmbientMode('fireflies');
+
       engine = WorldEngine.create({
         canvas,
         worldWidth: 1500, worldHeight: 1000,
-        playerEmoji: '💗',
         interactLabel: 'اضغطي لتكتشفي الذكرى',
         drawBackground: bg,
         items,
@@ -430,6 +540,11 @@ const Game = (() => {
               text: item.data.text,
               onNext: () => {
                 engine.markFound(item.id);
+                if (item.id === SECRET_MEMORY.id) {
+                  markSecret('level4', 'ms');
+                  engine.setPaused(false);
+                  return;
+                }
                 if (!state.progress.level4.memories.includes(item.id)) {
                   state.progress.level4.memories.push(item.id);
                   found++;
@@ -469,6 +584,9 @@ const Game = (() => {
      ===================================================================== */
   const Level5 = (() => {
     let engine = null;
+    const FIREFLIES_NEEDED = 2;
+    let fireflies = 0;
+    let giftRevealed = false;
 
     function bg(ctx, view) {
       ctx.save();
@@ -483,16 +601,42 @@ const Game = (() => {
 
     function start(canvas) {
       const already = state.progress.level5.unlocked;
+      fireflies = already ? FIREFLIES_NEEDED : (state.progress.level5.fireflies || 0);
+      giftRevealed = already || fireflies >= FIREFLIES_NEEDED;
+
+      const items = [
+        { id: 'firefly_1', kind: 'collect', shape: 'firefly', fx: 0.28, fy: 0.35, radius: 14, glowRadius: 90, found: already || fireflies > 0 },
+        { id: 'firefly_2', kind: 'collect', shape: 'firefly', fx: 0.72, fy: 0.62, radius: 14, glowRadius: 90, found: already || fireflies > 1 },
+        {
+          id: 'gift_box', kind: 'interact', shape: 'gift',
+          fx: 0.5, fy: 0.5, radius: 32,
+          found: already,
+          hidden: !giftRevealed, revealRadius: 200,
+        },
+      ];
+
+      ParticleSystem.setAmbientMode('fireflies');
+
       engine = WorldEngine.create({
         canvas,
         worldWidth: 1100, worldHeight: 850,
-        playerEmoji: '💗',
         interactLabel: 'اضغطي لفتح الهدية',
         drawBackground: bg,
-        items: [{
-          id: 'gift_box', kind: 'interact', emoji: '🎁',
-          fx: 0.5, fy: 0.5, radius: 34, found: already,
-        }],
+        items,
+        onCollect(it) {
+          fireflies++;
+          state.progress.level5.fireflies = fireflies;
+          addScore(15);
+          AudioManager.sfx('heart');
+          ParticleSystem.emit('sparkle', canvas.clientWidth / 2, canvas.clientHeight / 2, 8, { life: 30, gravity: 0 });
+          if (callbacks.onPersist) callbacks.onPersist();
+          if (fireflies >= FIREFLIES_NEEDED && !giftRevealed) {
+            giftRevealed = true;
+            const gift = engine.items.find(i => i.id === 'gift_box');
+            if (gift) gift.hidden = false;
+            if (callbacks.onObjective) callbacks.onObjective('لاقي صندوق الهدية وافتحيه 🎁');
+          }
+        },
         onNearChange(item) { if (callbacks.onNearChange) callbacks.onNearChange(item); },
         onInteract(item) {
           engine.setPaused(true);
@@ -503,8 +647,10 @@ const Game = (() => {
       if (already) {
         if (callbacks.onObjective) callbacks.onObjective('فتحتِ الهدية بالفعل 🎁');
         if (callbacks.onGiftAlreadyOpen) callbacks.onGiftAlreadyOpen();
-      } else {
+      } else if (giftRevealed) {
         if (callbacks.onObjective) callbacks.onObjective('لاقي صندوق الهدية وافتحيه 🎁');
+      } else {
+        if (callbacks.onObjective) callbacks.onObjective('اجمعي ضوء اليراعات الدافئ ✨');
       }
       if (callbacks.onEngineReady) callbacks.onEngineReady(engine);
       engine.start();

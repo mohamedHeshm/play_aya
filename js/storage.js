@@ -1,23 +1,23 @@
 /* =====================================================================
    storage.js — نظام الحفظ (LocalStorage)
-   يحفظ تقدم كل Level على حدة + النقاط + الإنجازات + الإعدادات
+   يحفظ تقدم كل Level على حدة + النقاط + الإنجازات + الإعدادات + الأسرار
    ===================================================================== */
 
 const Storage = (() => {
-  const KEY = 'romantic-adventure-save-v2';
+  const KEY = 'romantic-adventure-save-v3';
 
   const defaultState = () => ({
-    currentLevel: 0,          // 0 = لسه في شاشة PLAY / خريطة اللعبة
-    levelsCompleted: [],      // ["level1", "level2", ...]
+    currentLevel: 0,
+    levelsCompleted: [],
     score: 0,
     achievements: [],
     musicOn: true,
     progress: {
-      level1: { hearts: 0 },
-      level2: { memories: [] },
-      level3: { stars: 0 },
-      level4: { memories: [] },
-      level5: { unlocked: false },
+      level1: { hearts: 0, secrets: [] },
+      level2: { memories: [], secrets: [] },
+      level3: { stars: 0, secrets: [] },
+      level4: { memories: [], secrets: [] },
+      level5: { unlocked: false, fireflies: 0 },
     },
   });
 

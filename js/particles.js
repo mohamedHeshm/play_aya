@@ -1,6 +1,6 @@
 /* =====================================================================
    particles.js — نظام جزيئات قابل لإعادة الاستخدام
-   يدعم: Stars, Hearts, Sparkles, Confetti, Rain, Petals (بتلات الورد الخلفية)
+   يدعم: Stars, Hearts, Sparkles, Confetti, Rain, Petals, Fireflies
    يستخدم requestAnimationFrame ويراعي أداء الأجهزة الضعيفة
    ===================================================================== */
 
@@ -11,8 +11,8 @@ const ParticleSystem = (() => {
   let rafId = null;
   let dpr = Math.min(window.devicePixelRatio || 1, 2);
   let lowPower = false;
+  let ambientMode = 'petals'; // 'petals' | 'fireflies' | 'none'
 
-  // كشف تقريبي للأجهزة الضعيفة عبر عدد الأنوية
   function detectLowPower() {
     const cores = navigator.hardwareConcurrency || 4;
     lowPower = cores <= 4;
@@ -37,6 +37,12 @@ const ParticleSystem = (() => {
 
   function maxParticles() {
     return lowPower ? 60 : 160;
+  }
+
+  function setAmbientMode(mode) {
+    ambientMode = mode;
+    clear('petal');
+    clear('firefly');
   }
 
   // ---- منشئات الأشكال ----
@@ -108,7 +114,6 @@ const ParticleSystem = (() => {
     ctx.restore();
   }
 
-  // بتلة ورد صغيرة وهادئة — للخلفية الرومانسية المستمرة
   function drawPetal(p) {
     ctx.save();
     ctx.translate(p.x, p.y);
@@ -117,6 +122,18 @@ const ParticleSystem = (() => {
     ctx.fillStyle = p.color || 'rgba(184,139,139,0.55)';
     ctx.beginPath();
     ctx.ellipse(0, 0, p.size * 0.55, p.size * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFirefly(p) {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.shadowColor = 'rgba(217,176,140,0.9)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#D9B08C';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * 0.16, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -166,9 +183,9 @@ const ParticleSystem = (() => {
     }
   }
 
-  /* -------- بتلات الورد العائمة الدائمة في الخلفية --------
-     عدد قليل جدًا، حركة بطيئة وعشوائية طبيعية، لا تغطي الشاشة أبدًا */
-  function ambientPetalTarget() {
+  /* -------- عناصر خلفية دائمة (بتلات ورد أو يراعات) -------- */
+  function ambientTarget() {
+    if (ambientMode === 'none') return 0;
     return lowPower ? 4 : 8;
   }
 
@@ -192,10 +209,31 @@ const ParticleSystem = (() => {
     });
   }
 
-  function maybeSpawnAmbientPetals() {
-    const count = particles.reduce((n, p) => n + (p.type === 'petal' ? 1 : 0), 0);
-    if (count < ambientPetalTarget() && Math.random() < 0.02) {
-      spawnPetal();
+  function spawnFirefly() {
+    const w = canvas ? canvas.clientWidth : window.innerWidth;
+    const h = canvas ? canvas.clientHeight : window.innerHeight;
+    particles.push({
+      type: 'firefly',
+      x: Math.random() * w,
+      y: h * 0.35 + Math.random() * h * 0.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      size: 10 + Math.random() * 6,
+      alpha: 0.2,
+      alphaDir: 1,
+      life: 0,
+      maxLife: 6000,
+      swayPhase: Math.random() * Math.PI * 2,
+      swaySpeed: 0.01 + Math.random() * 0.01,
+    });
+  }
+
+  function maybeSpawnAmbient() {
+    const type = ambientMode === 'fireflies' ? 'firefly' : (ambientMode === 'petals' ? 'petal' : null);
+    if (!type) return;
+    const count = particles.reduce((n, p) => n + (p.type === type ? 1 : 0), 0);
+    if (count < ambientTarget() && Math.random() < 0.02) {
+      if (type === 'petal') spawnPetal(); else spawnFirefly();
     }
   }
 
@@ -213,13 +251,20 @@ const ParticleSystem = (() => {
         p.swayPhase += p.swaySpeed;
         p.x += p.vx + Math.sin(p.swayPhase) * 0.35;
         p.y += p.vy;
+      } else if (p.type === 'firefly') {
+        p.swayPhase += p.swaySpeed;
+        p.x += p.vx + Math.sin(p.swayPhase) * 0.4;
+        p.y += p.vy + Math.cos(p.swayPhase * 0.7) * 0.4;
+        p.alpha += 0.01 * p.alphaDir;
+        if (p.alpha > 0.9) p.alphaDir = -1;
+        if (p.alpha < 0.15) p.alphaDir = 1;
       } else {
         p.x += p.vx;
         p.y += p.vy;
       }
       if (p.gravity) p.vy += p.gravity;
       if (p.rotSpeed) p.rotation += p.rotSpeed;
-      if (p.type !== 'petal') {
+      if (p.type !== 'petal' && p.type !== 'firefly') {
         p.alpha = Math.max(0, 1 - p.life / p.maxLife);
       }
     }
@@ -236,12 +281,13 @@ const ParticleSystem = (() => {
         case 'confetti': drawConfetti(p); break;
         case 'rain': drawRainDrop(p); break;
         case 'petal': drawPetal(p); break;
+        case 'firefly': drawFirefly(p); break;
       }
     }
   }
 
   function loop() {
-    maybeSpawnAmbientPetals();
+    maybeSpawnAmbient();
     update();
     render();
     rafId = requestAnimationFrame(loop);
@@ -252,7 +298,7 @@ const ParticleSystem = (() => {
   }
 
   return {
-    init, resize, emit, emitRain, clear, stop,
+    init, resize, emit, emitRain, clear, stop, setAmbientMode,
     get isLowPower() { return lowPower; },
   };
 })();

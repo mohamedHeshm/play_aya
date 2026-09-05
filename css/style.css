@@ -33,12 +33,15 @@
 
 html, body {
   margin: 0; padding: 0;
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--night-navy-2);
   color: var(--ink);
   font-family: var(--font-body);
   overscroll-behavior: none;
+  touch-action: none;
 }
 
 button { font-family: inherit; cursor: pointer; }
@@ -102,7 +105,10 @@ button { font-family: inherit; cursor: pointer; }
 /* =========================================================
    الشاشات
 ========================================================== */
-#app { position: fixed; inset: 0; }
+#app {
+  position: fixed; inset: 0;
+  height: 100vh; height: 100dvh;
+}
 
 .screen {
   position: absolute; inset: 0;
@@ -112,6 +118,13 @@ button { font-family: inherit; cursor: pointer; }
   text-align: center;
 }
 .screen.active { display: flex; }
+
+/* انتقال دخول قصير للمرحلة: fade فقط، بدون تأخير محسوس */
+.screen.screen-fading { opacity: 0; }
+#screen-level {
+  transition: opacity 0.35s var(--ease-soft);
+  opacity: 1;
+}
 
 #screen-intro, #screen-final {
   background: radial-gradient(circle at 50% 20%, #2a2148, var(--night-navy-2));
@@ -229,35 +242,35 @@ button { font-family: inherit; cursor: pointer; }
 ========================================================== */
 .joystick {
   position: fixed; z-index: 65;
-  left: calc(22px + var(--safe-inline));
-  bottom: calc(26px + var(--safe-bottom));
-  width: 116px; height: 116px;
+  left: calc(20px + var(--safe-inline));
+  bottom: calc(24px + var(--safe-bottom));
+  width: 100px; height: 100px;
 }
 .joystick__base {
   width: 100%; height: 100%; border-radius: 50%;
-  background: rgba(255,253,249,0.12);
-  border: 2px solid rgba(255,253,249,0.35);
+  background: rgba(255,253,249,0.08);
+  border: 1.5px solid rgba(255,253,249,0.28);
   touch-action: none;
   position: relative;
 }
 .joystick__stick {
   position: absolute; top: 50%; left: 50%;
-  width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  width: 42px; height: 42px; margin: -21px 0 0 -21px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, var(--warm-white), var(--soft-pink));
-  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
   transition: transform 0.05s linear;
 }
 
 .interact-btn {
   position: fixed; z-index: 65;
-  right: calc(24px + var(--safe-inline));
-  bottom: calc(34px + var(--safe-bottom));
-  width: 84px; height: 84px; border-radius: 50%;
-  background: rgba(255,253,249,0.14);
-  border: 2px solid rgba(255,253,249,0.35);
+  right: calc(22px + var(--safe-inline));
+  bottom: calc(30px + var(--safe-bottom));
+  width: 72px; height: 72px; border-radius: 50%;
+  background: rgba(255,253,249,0.1);
+  border: 1.5px solid rgba(255,253,249,0.28);
   color: var(--warm-white);
-  font-weight: 700; font-size: 13px;
+  font-weight: 700; font-size: 12px;
   display: flex; align-items: center; justify-content: center;
   transition: transform 0.2s var(--ease-soft), background 0.2s var(--ease-soft), box-shadow 0.2s var(--ease-soft);
 }
@@ -391,7 +404,13 @@ button { font-family: inherit; cursor: pointer; }
    استجابة الشاشات الصغيرة جدًا
 ========================================================== */
 @media (max-width: 380px) {
-  .joystick { width: 96px; height: 96px; }
-  .interact-btn { width: 72px; height: 72px; font-size: 12px; }
+  .joystick { width: 88px; height: 88px; }
+  .interact-btn { width: 64px; height: 64px; font-size: 11px; }
   .game-title { font-size: 24px; }
+}
+
+@media (max-height: 620px) and (orientation: landscape) {
+  .joystick { width: 78px; height: 78px; bottom: calc(14px + var(--safe-bottom)); }
+  .interact-btn { width: 60px; height: 60px; bottom: calc(18px + var(--safe-bottom)); }
+  .hud { top: calc(8px + var(--safe-top)); }
 }
