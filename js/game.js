@@ -125,11 +125,11 @@ const Game = (() => {
     function drawPlayer() {
       ctx.save();
       const grad = ctx.createRadialGradient(player.x, player.y, 4, player.x, player.y, player.r);
-      grad.addColorStop(0, '#ffe3f0');
-      grad.addColorStop(1, '#ff6fa5');
+      grad.addColorStop(0, '#F8EFEA');
+      grad.addColorStop(1, '#B98B8B');
       ctx.fillStyle = grad;
-      ctx.shadowColor = 'rgba(255,111,165,0.7)';
-      ctx.shadowBlur = 22;
+      ctx.shadowColor = 'rgba(185,139,139,0.35)';
+      ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
       ctx.fill();
@@ -380,8 +380,8 @@ const Game = (() => {
       ctx.font = `${player.r * 2}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(180,150,255,0.6)';
-      ctx.shadowBlur = 18;
+      ctx.shadowColor = 'rgba(185,139,139,0.3)';
+      ctx.shadowBlur = 8;
       ctx.fillText('🚶‍♀️', player.x, player.y);
       ctx.restore();
     }
@@ -514,9 +514,9 @@ const Game = (() => {
 
     function drawStar(s, size, glow) {
       ctx.save();
-      ctx.shadowColor = glow ? 'rgba(255,214,232,0.9)' : 'rgba(255,255,255,0.4)';
-      ctx.shadowBlur = glow ? 18 : 6;
-      ctx.fillStyle = '#fff6d8';
+      ctx.shadowColor = glow ? 'rgba(232,200,200,0.6)' : 'rgba(255,253,249,0.35)';
+      ctx.shadowBlur = glow ? 10 : 4;
+      ctx.fillStyle = '#F3E6D2';
       ctx.beginPath();
       const cx = s.x, cy = s.y;
       for (let i = 0; i < 5; i++) {

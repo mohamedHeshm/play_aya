@@ -1,30 +1,33 @@
 /* =====================================================================
    رحلة إلى قلبك ❤️  —  Stylesheet
-   الألوان: وردي، بنفسجي، أزرق ليلي، أبيض
+   هوية بصرية دافئة، هادئة، سينمائية — بدون gradients صريحة أو glassmorphism مبالغ فيه
    ===================================================================== */
 
 :root {
-  --night-deep:    #140b2b;
-  --night-mid:     #241246;
-  --purple:        #7b4fd1;
-  --purple-soft:   #b48af0;
-  --pink:          #ff6fa5;
-  --pink-soft:     #ffb4d1;
-  --blue-night:    #2b3a8f;
-  --white:         #fdf9ff;
-  --glow-pink:     rgba(255, 111, 165, 0.55);
-  --glow-purple:   rgba(151, 100, 240, 0.5);
-  --glass-bg:      rgba(255, 255, 255, 0.08);
-  --glass-border:  rgba(255, 255, 255, 0.22);
+  /* لوحة الألوان الدافئة فقط */
+  --warm-white:   #FFFDF9;
+  --blush:        #F8EFEA;
+  --rose-pale:    #E8C8C8;
+  --dusty-rose:   #B98B8B;
+  --ink:          #302526;
+  --white:        #FFFFFF;
 
-  --font-display: 'Baloo Bhaijaan 2', 'Segoe UI', Tahoma, sans-serif;
-  --font-body: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
+  --ink-06:       rgba(48, 37, 38, 0.06);
+  --ink-10:       rgba(48, 37, 38, 0.10);
+  --ink-18:       rgba(48, 37, 38, 0.18);
+  --ink-35:       rgba(48, 37, 38, 0.35);
+  --rose-24:      rgba(184, 139, 139, 0.24);
+  --rose-40:      rgba(184, 139, 139, 0.40);
+  --panel-bg:     rgba(255, 255, 255, 0.66);
+  --panel-border: rgba(184, 139, 139, 0.28);
 
+  --font-display: 'Amiri', 'Noto Naskh Arabic', serif;
+  --font-body: 'Cairo', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif;
+
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
-
-@font-face { font-family: 'Tajawal'; src: local('Tajawal'); }
 
 * { box-sizing: border-box; }
 
@@ -34,34 +37,38 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--night-deep);
-  color: var(--white);
+  background: var(--warm-white);
+  color: var(--ink);
   font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
   overscroll-behavior: none;
   user-select: none;
 }
 
-/* السماح بالتحديد داخل النصوص الطويلة فقط إن احتجنا */
+/* هذه تجربة تفاعلية (ألعاب مصغّرة داخل كل مرحلة) لذلك تبقى شاشات ثابتة كاملة الشاشة
+   وليست صفحة تُمرَّر — الحفاظ على هذا ضروري لعمل التحكم باللمس/السحب في كل مرحلة */
 p, h1, h2, h3 { user-select: none; }
 
 button {
   font-family: inherit;
   border: none;
+  background: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* =====================================================================
-   خلفية Parallax
+   خلفية هادئة — بدون سماء ليلية، بدون نيون، بدون gradients ملونة صريحة
    ===================================================================== */
 #bg-parallax {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% -10%, var(--night-mid) 0%, var(--night-deep) 60%, #0a0618 100%);
+  background: var(--warm-white);
 }
 
 .layer {
@@ -73,52 +80,50 @@ button {
   pointer-events: none;
 }
 
+/* لمسة دافئة خفيفة جدًا أعلى الشاشة فقط — vignette أحادي اللون وليس gradient ملون */
 #layer-sky {
-  background: linear-gradient(180deg, #1a1040 0%, #241246 40%, #33206b 100%);
-  opacity: 0.9;
+  background: var(--blush);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 65%);
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 65%);
+  opacity: 0.55;
 }
 
+/* غبار ضوئي دافئ خافت جدًا بدل النجوم */
 #layer-stars-far {
   background-image:
-    radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent),
-    radial-gradient(1px 1px at 60% 70%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 80% 20%, #fff, transparent),
-    radial-gradient(1px 1px at 40% 80%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 10% 60%, #fff, transparent),
-    radial-gradient(1px 1px at 90% 50%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 30% 10%, #fff, transparent),
-    radial-gradient(1px 1px at 70% 90%, #fff, transparent);
+    radial-gradient(1px 1px at 20% 30%, var(--rose-pale), transparent),
+    radial-gradient(1px 1px at 60% 70%, var(--rose-pale), transparent),
+    radial-gradient(1px 1px at 80% 20%, var(--rose-pale), transparent),
+    radial-gradient(1px 1px at 40% 80%, var(--rose-pale), transparent),
+    radial-gradient(1px 1px at 10% 60%, var(--rose-pale), transparent),
+    radial-gradient(1px 1px at 90% 50%, var(--rose-pale), transparent);
   background-size: 100% 100%;
-  opacity: 0.5;
-  animation: twinkle 6s ease-in-out infinite alternate;
+  opacity: 0.22;
+  animation: breathe 9s ease-in-out infinite alternate;
 }
 
 #layer-stars-near {
   background-image:
-    radial-gradient(2px 2px at 15% 45%, var(--pink-soft), transparent),
-    radial-gradient(2.5px 2.5px at 50% 15%, #fff, transparent),
-    radial-gradient(2px 2px at 75% 65%, var(--purple-soft), transparent),
-    radial-gradient(2.5px 2.5px at 85% 35%, #fff, transparent),
-    radial-gradient(2px 2px at 35% 85%, #fff, transparent),
-    radial-gradient(2px 2px at 5% 90%, var(--pink-soft), transparent);
+    radial-gradient(1.5px 1.5px at 15% 45%, var(--dusty-rose), transparent),
+    radial-gradient(1.5px 1.5px at 75% 65%, var(--dusty-rose), transparent),
+    radial-gradient(1.5px 1.5px at 35% 85%, var(--rose-pale), transparent);
   background-size: 100% 100%;
-  opacity: 0.8;
-  animation: twinkle 4s ease-in-out infinite alternate-reverse;
+  opacity: 0.28;
+  animation: breathe 7s ease-in-out infinite alternate-reverse;
 }
 
-@keyframes twinkle {
-  0%   { opacity: 0.35; }
-  100% { opacity: 0.9; }
+@keyframes breathe {
+  0%   { opacity: 0.14; }
+  100% { opacity: 0.32; }
 }
 
 #layer-deco {
-  background-image:
-    radial-gradient(circle, var(--glow-pink) 0%, transparent 70%);
-  background-repeat: no-repeat;
-  background-position: 20% 80%, 80% 10%;
-  background-size: 40% 40%;
-  opacity: 0.35;
-  filter: blur(10px);
+  background: var(--rose-pale);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 70%);
+  background-position: 20% 85%, 80% 12%;
+  opacity: 0.18;
+  filter: blur(30px);
 }
 
 #particle-canvas {
@@ -129,60 +134,61 @@ button {
 }
 
 /* =====================================================================
-   عناصر عامة (Glassmorphism)
+   عناصر عامة — لوحات ناعمة، بلا glassmorphism مبالغ فيه، بلا shadows قوية
    ===================================================================== */
 .glass-panel {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 24px;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 40px var(--glow-purple);
-  padding: 24px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 10px 30px var(--ink-06);
+  padding: 26px;
 }
 
 .btn-primary, .btn-secondary {
   display: inline-block;
-  padding: 14px 28px;
-  border-radius: 999px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  padding: 12px 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  border-bottom: 1px solid var(--dusty-rose);
+  transition: color 0.5s var(--ease-soft), border-color 0.5s var(--ease-soft), transform 0.5s var(--ease-soft), opacity 0.5s var(--ease-soft);
   touch-action: manipulation;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--pink), var(--purple));
-  color: var(--white);
-  box-shadow: 0 6px 24px var(--glow-pink);
+  background: none;
 }
 
-.btn-primary:active { transform: scale(0.95); }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px var(--glow-pink); }
+.btn-primary:hover { color: var(--dusty-rose); border-color: var(--ink-35); transform: translateY(-1px); }
+.btn-primary:active { opacity: 0.7; transform: translateY(0); }
 
 .btn-secondary {
-  background: rgba(255,255,255,0.12);
-  color: var(--white);
-  border: 1px solid var(--glass-border);
+  color: var(--dusty-rose);
+  border-bottom-color: var(--rose-pale);
 }
-.btn-secondary:active { transform: scale(0.95); }
+.btn-secondary:active { opacity: 0.7; }
 
 .icon-btn {
   position: fixed;
   top: calc(14px + var(--safe-top));
   z-index: 50;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(10px);
-  color: var(--white);
-  font-size: 1.1rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(6px);
+  color: var(--ink);
+  font-size: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: opacity 0.5s var(--ease-soft), transform 0.5s var(--ease-soft);
 }
+.icon-btn:active { transform: scale(0.94); opacity: 0.85; }
 
 #music-toggle { inset-inline-start: 14px; }
 .restart-btn { inset-inline-end: 14px; }
@@ -191,9 +197,9 @@ button {
   bottom: calc(20px + var(--safe-bottom));
   inset-inline-end: 14px;
   width: auto;
-  padding: 10px 18px;
+  padding: 9px 18px;
   border-radius: 999px;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 /* =====================================================================
@@ -201,26 +207,27 @@ button {
    ===================================================================== */
 .hud {
   position: fixed;
-  top: calc(64px + var(--safe-top));
+  top: calc(62px + var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
   display: flex;
   gap: 14px;
-  padding: 8px 18px;
+  padding: 7px 18px;
   border-radius: 999px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(12px);
-  font-size: 0.85rem;
-  font-weight: 700;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(6px);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
   white-space: nowrap;
 }
 
 .hud-item { display: flex; align-items: center; gap: 4px; }
 
 /* =====================================================================
-   الشاشات (Screens)
+   الشاشات (Screens) — انتقالات بطيئة وهادئة بدل التبديل الحاد
    ===================================================================== */
 #app {
   position: relative;
@@ -240,14 +247,14 @@ button {
   padding-top: calc(20px + var(--safe-top));
   padding-bottom: calc(20px + var(--safe-bottom));
   opacity: 0;
-  transform: scale(0.98);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  transform: translateY(10px) scale(0.99);
+  transition: opacity 0.9s var(--ease-soft), transform 0.9s var(--ease-soft);
 }
 
 .screen.active {
   display: flex;
   opacity: 1;
-  transform: scale(1);
+  transform: translateY(0) scale(1);
 }
 
 /* شاشة البداية */
@@ -255,48 +262,47 @@ button {
 .stars-overlay { position: absolute; inset: 0; pointer-events: none; }
 
 .intro-content {
-  max-width: 420px;
+  max-width: 440px;
   text-align: center;
-  animation: floatIn 1.2s ease both;
+  animation: floatIn 1.1s var(--ease-soft) both;
 }
 
 @keyframes floatIn {
-  from { opacity: 0; transform: translateY(30px); }
+  from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .intro-line {
   font-size: 1.05rem;
-  color: var(--pink-soft);
-  margin-bottom: 18px;
+  color: var(--dusty-rose);
+  margin-bottom: 20px;
   min-height: 1.6em;
+  line-height: 1.9;
 }
 
 .game-title {
   font-family: var(--font-display);
+  font-weight: 700;
   font-size: 2.1rem;
-  margin: 0 0 26px;
-  background: linear-gradient(135deg, var(--white), var(--pink-soft));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  line-height: 1.5;
+  margin: 0 0 30px;
+  color: var(--ink);
 }
 
 .heart-pulse {
   display: inline-block;
-  animation: pulse 1.4s ease-in-out infinite;
-  -webkit-text-fill-color: initial;
+  animation: pulse 3.2s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.06); opacity: 1; }
 }
 
 /* رؤوس المراحل */
 .stage-header {
   position: absolute;
-  top: calc(64px + var(--safe-top));
+  top: calc(62px + var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -306,16 +312,18 @@ button {
 }
 
 .stage-header h2 {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   font-family: var(--font-display);
+  font-weight: 700;
   font-size: 1.2rem;
-  color: var(--white);
+  color: var(--ink);
 }
 
 .stage-hint {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--pink-soft);
+  color: var(--dusty-rose);
+  line-height: 1.7;
 }
 
 /* رسائل عائمة أثناء المراحل */
@@ -327,17 +335,19 @@ button {
   z-index: 30;
   width: min(90%, 460px);
   text-align: center;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(14px);
-  border-radius: 18px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(6px);
+  border-radius: 16px;
   padding: 14px 20px;
-  font-size: 1rem;
-  animation: msgIn 0.5s ease both;
+  color: var(--ink);
+  font-size: 0.98rem;
+  line-height: 1.8;
+  animation: msgIn 0.8s var(--ease-soft) both;
 }
 
 @keyframes msgIn {
-  from { opacity: 0; transform: translate(-50%, 20px); }
+  from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
@@ -355,7 +365,7 @@ button {
 }
 
 /* =====================================================================
-   المرحلة ٢: حديقة الذكريات
+   المرحلة ٢: حديقة الذكريات — تظهر مرة واحدة بهدوء، بدون حركة دائمة
    ===================================================================== */
 .memory-garden {
   position: relative;
@@ -372,29 +382,29 @@ button {
 
 .memory-item {
   aspect-ratio: 1;
-  border-radius: 20px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(10px);
+  border-radius: 50%;
+  background: var(--blush);
+  border: 1px solid var(--panel-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.3);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-  animation: bob 3s ease-in-out infinite;
+  font-size: 1.9rem;
+  box-shadow: 0 6px 18px var(--ink-06);
+  transition: transform 0.5s var(--ease-soft), box-shadow 0.5s var(--ease-soft), border-color 0.5s var(--ease-soft);
+  animation: memoryReveal 0.9s var(--ease-soft) both;
 }
 
-.memory-item:active { transform: scale(0.92); }
+.memory-item:active { transform: scale(0.94); }
 
 .memory-item.discovered {
-  box-shadow: 0 0 24px var(--glow-pink);
-  border-color: var(--pink-soft);
+  box-shadow: 0 6px 22px var(--rose-24);
+  border-color: var(--dusty-rose);
+  background: var(--white);
 }
 
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+@keyframes memoryReveal {
+  from { opacity: 0; transform: translateY(10px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 #stage2-continue {
@@ -415,10 +425,10 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 6, 24, 0.75);
+  background: var(--ink-35);
   backdrop-filter: blur(6px);
   padding: 20px;
-  animation: fadeIn 0.3s ease both;
+  animation: fadeIn 0.5s var(--ease-soft) both;
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -428,55 +438,70 @@ button {
   max-width: 420px;
   width: 100%;
   text-align: center;
-  animation: popIn 0.35s cubic-bezier(.34,1.56,.64,1) both;
+  background: var(--warm-white);
+  border-radius: 20px;
+  padding: 30px 26px;
+  box-shadow: 0 20px 50px var(--ink-10);
+  animation: popIn 0.5s var(--ease-soft) both;
 }
 
 .modal-content.small { max-width: 320px; }
 
 @keyframes popIn {
-  from { opacity: 0; transform: scale(0.85); }
-  to   { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .modal-close {
   position: absolute;
-  top: 10px;
-  inset-inline-end: 10px;
-  width: 34px;
-  height: 34px;
+  top: 12px;
+  inset-inline-end: 12px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.15);
-  color: var(--white);
-  font-size: 1rem;
+  background: var(--blush);
+  color: var(--ink);
+  font-size: 0.95rem;
+  transition: opacity 0.4s var(--ease-soft);
 }
+.modal-close:active { opacity: 0.7; }
 
-.memory-icon { font-size: 2.6rem; margin-bottom: 10px; }
+.memory-icon { font-size: 2.4rem; margin-bottom: 12px; }
 .memory-image {
   width: 100%;
-  border-radius: 14px;
-  margin-bottom: 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
   max-height: 240px;
   object-fit: cover;
+  /* لمسة بولارويد بسيطة */
+  border: 6px solid var(--white);
+  box-shadow: 0 8px 22px var(--ink-10);
+  transform: rotate(-1deg);
 }
-.memory-text { font-size: 1.05rem; line-height: 1.6; }
+.memory-text {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  line-height: 1.9;
+  color: var(--ink);
+}
 
 .confirm-actions {
   display: flex;
-  gap: 10px;
+  gap: 18px;
   justify-content: center;
-  margin-top: 16px;
+  margin-top: 18px;
   flex-wrap: wrap;
 }
 
 /* =====================================================================
-   المرحلة ٥: صندوق الهدية
+   المرحلة ٥: صندوق الهدية — ألوان مصمتة بدل gradients
    ===================================================================== */
 .gift-scene {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: 26px;
   height: 100%;
 }
 
@@ -485,22 +510,21 @@ button {
   width: 160px;
   height: 140px;
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: transform 0.5s var(--ease-soft);
 }
 
-.gift-box:hover { transform: scale(1.05); }
-.gift-box:active { transform: scale(0.95); }
+.gift-box:hover { transform: scale(1.03); }
+.gift-box:active { transform: scale(0.96); }
 
 .gift-box.opening {
-  animation: shake 0.5s ease;
+  animation: shake 0.5s var(--ease-soft);
 }
 
 @keyframes shake {
   0%, 100% { transform: rotate(0); }
-  20% { transform: rotate(-6deg); }
-  40% { transform: rotate(6deg); }
-  60% { transform: rotate(-4deg); }
-  80% { transform: rotate(4deg); }
+  25% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+  75% { transform: rotate(-2deg); }
 }
 
 .gift-body {
@@ -508,9 +532,9 @@ button {
   bottom: 0;
   width: 100%;
   height: 90px;
-  background: linear-gradient(135deg, var(--pink), var(--purple));
-  border-radius: 10px;
-  box-shadow: 0 10px 30px var(--glow-pink);
+  background: var(--dusty-rose);
+  border-radius: 8px;
+  box-shadow: 0 12px 26px var(--ink-10);
 }
 
 .gift-lid {
@@ -518,15 +542,15 @@ button {
   top: 20px;
   width: 100%;
   height: 30px;
-  background: linear-gradient(135deg, var(--purple-soft), var(--pink));
-  border-radius: 8px;
-  transition: transform 0.6s ease, opacity 0.6s ease;
+  background: var(--rose-pale);
+  border-radius: 6px;
+  transition: transform 0.8s var(--ease-soft), opacity 0.8s var(--ease-soft);
   transform-origin: top;
   z-index: 2;
 }
 
 .gift-box.opened .gift-lid {
-  transform: translateY(-60px) rotate(-25deg);
+  transform: translateY(-60px) rotate(-20deg);
   opacity: 0;
 }
 
@@ -535,19 +559,19 @@ button {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 16px;
+  width: 14px;
   height: 90px;
-  background: var(--white);
-  opacity: 0.85;
+  background: var(--warm-white);
+  opacity: 0.9;
 }
 
 .gift-ribbon-h {
   position: absolute;
   top: 20px;
   width: 100%;
-  height: 16px;
-  background: var(--white);
-  opacity: 0.85;
+  height: 14px;
+  background: var(--warm-white);
+  opacity: 0.9;
   z-index: 3;
 }
 
@@ -556,17 +580,17 @@ button {
   top: -14px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 2rem;
+  font-size: 1.9rem;
   z-index: 4;
-  transition: transform 0.6s ease, opacity 0.6s ease;
+  transition: transform 0.8s var(--ease-soft), opacity 0.8s var(--ease-soft);
 }
 
 .gift-box.opened .gift-bow {
-  transform: translate(-50%, -50px) rotate(30deg);
+  transform: translate(-50%, -50px) rotate(20deg);
   opacity: 0;
 }
 
-.gift-hint { color: var(--pink-soft); font-size: 0.95rem; }
+.gift-hint { color: var(--dusty-rose); font-size: 0.95rem; }
 
 .gift-final-message {
   position: absolute;
@@ -576,21 +600,26 @@ button {
   max-width: 420px;
   width: 92%;
   text-align: center;
-  animation: floatIn 0.8s ease both;
+  animation: floatIn 0.9s var(--ease-soft) both;
 }
 
-.gift-final-message p { line-height: 1.7; font-size: 1.05rem; }
+.gift-final-message p {
+  font-family: var(--font-display);
+  line-height: 1.9;
+  font-size: 1.08rem;
+  color: var(--ink);
+}
 .gift-final-message .signature {
   font-family: var(--font-display);
-  font-size: 1.3rem;
-  color: var(--pink-soft);
-  margin: 14px 0 20px;
+  font-size: 1.25rem;
+  color: var(--dusty-rose);
+  margin: 16px 0 22px;
 }
 
 /* =====================================================================
    الفيديو
    ===================================================================== */
-.video-modal { background: rgba(5, 3, 14, 0.95); }
+.video-modal { background: var(--ink-35); }
 .video-wrapper {
   position: relative;
   width: 100%;
@@ -600,18 +629,18 @@ button {
 #birthday-video {
   width: 100%;
   max-height: 80vh;
-  border-radius: 16px;
+  border-radius: 14px;
   background: #000;
-  box-shadow: 0 0 60px var(--glow-purple);
+  box-shadow: 0 20px 60px var(--ink-18);
 }
 
 .video-outro {
   text-align: center;
-  margin-top: 18px;
+  margin-top: 20px;
   font-family: var(--font-display);
-  font-size: 1.3rem;
-  color: var(--pink-soft);
-  animation: floatIn 1s ease both;
+  font-size: 1.25rem;
+  color: var(--white);
+  animation: floatIn 1s var(--ease-soft) both;
 }
 
 /* =====================================================================
@@ -626,21 +655,21 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(16px);
-  border-radius: 18px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 12px 18px;
-  box-shadow: 0 8px 30px var(--glow-purple);
-  transition: transform 0.5s cubic-bezier(.34,1.56,.64,1);
+  box-shadow: 0 10px 30px var(--ink-10);
+  transition: transform 0.7s var(--ease-soft);
   max-width: 320px;
 }
 
 .achievement-toast.show { transform: translateX(-50%) translateY(0); }
 
-.ach-icon { font-size: 1.8rem; }
-.ach-title { font-weight: 700; font-size: 0.95rem; color: var(--pink-soft); }
-.ach-desc { font-size: 0.8rem; opacity: 0.9; }
+.ach-icon { font-size: 1.7rem; }
+.ach-title { font-weight: 700; font-size: 0.92rem; color: var(--dusty-rose); }
+.ach-desc { font-size: 0.8rem; color: var(--ink); opacity: 0.85; }
 
 /* =====================================================================
    Responsive
@@ -651,9 +680,10 @@ button {
 }
 
 @media (max-width: 360px) {
-  .game-title { font-size: 1.7rem; }
+  .game-title { font-size: 1.65rem; }
   .glass-panel { padding: 18px; }
   .memory-garden { gap: 12px; }
+  .intro-line { font-size: 0.95rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
