@@ -14,11 +14,23 @@ const World = (() => {
     url: 'assets/models/character.glb',
     targetHeight: 1.7,        // ارتفاع الشخصية بوحدات العالم (متر تقريبًا)
     modelYawOffset: Math.PI,  // ✏️ لو الشخصية بتمشي بظهرها، جربي 0 بدل Math.PI
-    walkSpeed: 2.0,
-    runSpeed: 4.2,
-    runThreshold: 0.85,       // نسبة دفع الجويستيك/الكيبورد اللي تحوّل المشي لجري
-    turnSpeed: 8,             // سرعة استدارة الجسم نحو اتجاه الحركة (كل ما زاد كل ما كانت الاستدارة أسرع وأنعم)
-    bounds: { minX: -3.2, maxX: 3.2, minZ: -26, maxZ: 7 }, // حدود المشي داخل الطريق
+    turnSpeed: 6,             // سرعة استدارة الجسم نحو اتجاه المشي (كل ما زاد كل ما كانت الاستدارة أسرع وأنعم)
+  };
+
+  // ✏️ الشخصية ثابتة (Idle) في كل الشاشات ما عدا مرحلة المطر — هنا موضعها الثابت
+  const IDLE_SPOT = new THREE.Vector3(0, 0, 3.2);
+  const IDLE_YAW = 0.12;
+
+  // ✏️ مرحلة المطر هي المرحلة الوحيدة اللي تمشي فيها الشخصية، وبشكل تلقائي بالكامل
+  // (بداية الطريق -> نهاية الطريق عند النجوم) بدون أي تحكم من اللاعب بالماوس/اللمس
+  const RAIN_WALK = {
+    start: new THREE.Vector3(0.4, 0, 5.5),
+    end: new THREE.Vector3(-0.3, 0, -21),
+    approachSlowDistance: 4.5, // تبدأ السرعة تقل تدريجيًا لما تقرب من هذه المسافة للنجوم
+    minSpeedFactor: 0.12,      // أقل سرعة أثناء التباطؤ (ما تتوقفش فجأة)
+    arriveThreshold: 0.25,     // تعتبر "وصلت" لما تقرب من النجوم بهذه المسافة
+    walkSpeed: 1.55,           // وحدات عالم/ثانية بالسرعة الكاملة
+    arrivePause: 1.0,          // وقفة سينمائية قصيرة (بالثواني) بعد الوصول وقبل تشغيل الانتقال
   };
 
   let renderer, scene, camera, clock;
@@ -42,18 +54,21 @@ const World = (() => {
   let mixer = null, actions = {}, currentAction = null, animState = 'idle';
   let modelReady = false;
   let giftBox, giftLid, giftGroup, giftPivot, giftHeartsPool = [];
-  let pathCurve;
-  let pathT = 0;
-  let pauseTimer = 0;
-  let isPaused = false;
 
-  // ---------------- وضع التحكم باللاعب (Player Controlled Third-Person) ----------------
-  let playerControlled = false;   // true في شاشة البداية: تحكم حر بالجويستيك/الكيبورد
-  let lateralMode = false;        // true في مرحلة المطر: تحكم أفقي بسيط (يمين/يسار) يتحكم فيه game.js
-  let lateralTargetX = 0;         // 0..1 قادمة من game.js -> تتحول لإحداثية X داخل bounds
-  const keyState = {};
-  const joystick = { active: false, x: 0, y: 0, pointerId: null, centerX: 0, centerY: 0, maxRadius: 42 };
+  // ---------------- حالة حركة الشخصية ----------------
+  // 'idle'     -> واقفة ثابتة (كل الشاشات ما عدا المطر)
+  // 'walking'  -> بتمشي تلقائيًا في مرحلة المطر تجاه النجوم
+  // 'arriving' -> وصلت، وقفة سينمائية قصيرة قبل الانتقال
+  // 'arrived'  -> واقفة عند النجوم (Idle) بعد انتهاء الوقفة
+  let characterMode = 'idle';
+  let rainCurve = null, rainCurveLength = 0, rainDistance = 0;
+  let rainCallbacks = {};
+  let arrivePauseTimer = 0;
   let stepDistanceAccum = 0;
+
+  // مجموعة النجوم الهدف في نهاية طريق المطر (منفصلة عن حقل نجوم السماء الخلفي)
+  let goalStarsGroup = null, goalStarsLight = null;
+  let arrivedGlowActive = false, arrivedGlowTimer = 0;
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -120,10 +135,10 @@ const World = (() => {
     buildGround();
     buildEnvironmentProps();
     buildRain();
-    buildCharacterPath();
+    buildRainCurve();
+    buildGoalStars();
     buildCharacter();
     buildLights();
-    setupInput();
 
     window.addEventListener('resize', resize);
     canvas.addEventListener('pointerdown', onPointerDown, { passive: true });
@@ -225,79 +240,6 @@ const World = (() => {
       addBuilding(11, -14, 6, 8, 6);
       addBuilding(-12, -22, 5.5, 5, 5);
     }
-  }
-
-  /* ---------------------------------------------------------------
-     مدخلات اللاعب — Keyboard (WASD/Arrows) + Joystick افتراضي للموبايل
-  --------------------------------------------------------------- */
-  function setupInput() {
-    window.addEventListener('keydown', (e) => { keyState[e.key.toLowerCase()] = true; });
-    window.addEventListener('keyup', (e) => { keyState[e.key.toLowerCase()] = false; });
-
-    const zone = document.getElementById('joystick-zone');
-    const stick = document.getElementById('joystick-stick');
-    if (!zone || !stick) return;
-
-    function setStickVisual(dx, dy) {
-      stick.style.transform = `translate(${dx}px, ${dy}px)`;
-    }
-
-    zone.addEventListener('pointerdown', (e) => {
-      if (!playerControlled) return;
-      joystick.active = true;
-      joystick.pointerId = e.pointerId;
-      const rect = zone.getBoundingClientRect();
-      joystick.centerX = rect.left + rect.width / 2;
-      joystick.centerY = rect.top + rect.height / 2;
-      zone.setPointerCapture(e.pointerId);
-      updateJoystickFromEvent(e);
-    });
-    zone.addEventListener('pointermove', (e) => {
-      if (!joystick.active || e.pointerId !== joystick.pointerId) return;
-      updateJoystickFromEvent(e);
-    });
-    function endJoystick(e) {
-      if (e.pointerId !== joystick.pointerId) return;
-      joystick.active = false;
-      joystick.x = 0; joystick.y = 0;
-      setStickVisual(0, 0);
-    }
-    zone.addEventListener('pointerup', endJoystick);
-    zone.addEventListener('pointercancel', endJoystick);
-
-    function updateJoystickFromEvent(e) {
-      let dx = e.clientX - joystick.centerX;
-      let dy = e.clientY - joystick.centerY;
-      const dist = Math.hypot(dx, dy);
-      if (dist > joystick.maxRadius) {
-        dx = (dx / dist) * joystick.maxRadius;
-        dy = (dy / dist) * joystick.maxRadius;
-      }
-      setStickVisual(dx, dy);
-      joystick.x = dx / joystick.maxRadius;
-      joystick.y = dy / joystick.maxRadius;
-    }
-  }
-
-  function getMoveInput() {
-    // الكيبورد له الأولوية لو مضغوط، وإلا نستخدم الجويستيك
-    let x = 0, z = 0;
-    if (keyState['arrowleft'] || keyState['a']) x -= 1;
-    if (keyState['arrowright'] || keyState['d']) x += 1;
-    if (keyState['arrowup'] || keyState['w']) z -= 1;
-    if (keyState['arrowdown'] || keyState['s']) z += 1;
-    const usingKeyboard = x !== 0 || z !== 0;
-    if (!usingKeyboard && joystick.active) {
-      x = joystick.x;
-      z = joystick.y;
-    }
-    const running = usingKeyboard ? (keyState['shift'] || false) : (Math.hypot(x, z) > CHARACTER_CONFIG.runThreshold);
-    return { x, z, running };
-  }
-
-  function setJoystickVisible(show) {
-    const zone = document.getElementById('joystick-zone');
-    if (zone) zone.classList.toggle('hidden', !show);
   }
 
   function fallback() {
@@ -566,17 +508,97 @@ const World = (() => {
   }
 
   /* ---------------------------------------------------------------
-     مسار الشخصية — منحنى ناعم على طول الطريق
+     مسار مرحلة المطر — منحنى ناعم من بداية الطريق حتى النجوم (اتجاه واحد فقط)
   --------------------------------------------------------------- */
-  function buildCharacterPath() {
-    pathCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-2.4, 0, 6),
-      new THREE.Vector3(-1.2, 0, -2),
-      new THREE.Vector3(0.6, 0, -10),
-      new THREE.Vector3(-0.8, 0, -18),
-      new THREE.Vector3(1.4, 0, -26),
-      new THREE.Vector3(-2.4, 0, 6),
-    ], true, 'catmullrom', 0.5);
+  function buildRainCurve() {
+    rainCurve = new THREE.CatmullRomCurve3([
+      RAIN_WALK.start,
+      new THREE.Vector3(0.9, 0, -1.5),
+      new THREE.Vector3(-1.1, 0, -9),
+      new THREE.Vector3(0.5, 0, -15.5),
+      RAIN_WALK.end,
+    ], false, 'catmullrom', 0.5);
+    rainCurveLength = rainCurve.getLength();
+  }
+
+  function createGlowTexture(inner, outer) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const cx = c.getContext('2d');
+    const rg = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    rg.addColorStop(0, inner);
+    rg.addColorStop(1, outer);
+    cx.fillStyle = rg;
+    cx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+
+  /* ---------------------------------------------------------------
+     النجوم-الهدف في نهاية طريق المطر — الهدف البصري الواضح للشخصية
+     خافتة وعائمة قبل الوصول، تضيء وتتألق لحظة وصول الشخصية فعليًا
+  --------------------------------------------------------------- */
+  function buildGoalStars() {
+    goalStarsGroup = new THREE.Group();
+    goalStarsGroup.position.copy(RAIN_WALK.end.clone().add(new THREE.Vector3(0, 1.5, -3.5)));
+
+    const tex = createGlowTexture('rgba(255,246,224,0.95)', 'rgba(255,246,224,0)');
+    const count = lowPower ? 4 : 7;
+    for (let i = 0; i < count; i++) {
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, opacity: 0.5 });
+      const spr = new THREE.Sprite(mat);
+      const scale = 0.45 + Math.random() * 0.55;
+      spr.scale.set(scale, scale, 1);
+      spr.position.set((Math.random() - 0.5) * 2.6, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6);
+      spr.userData.phase = Math.random() * Math.PI * 2;
+      spr.userData.speed = 0.5 + Math.random() * 0.4;
+      spr.userData.baseY = spr.position.y;
+      goalStarsGroup.add(spr);
+    }
+
+    goalStarsLight = new THREE.PointLight(0xfff3d6, 0.3, 10, 2);
+    goalStarsGroup.add(goalStarsLight);
+
+    scene.add(goalStarsGroup);
+  }
+
+  function updateGoalStars(dt) {
+    if (!goalStarsGroup) return;
+    if (arrivedGlowActive) arrivedGlowTimer = Math.min(arrivedGlowTimer + dt, 1.2);
+    const boost = arrivedGlowActive ? Math.min(1, arrivedGlowTimer / 0.6) : 0;
+
+    goalStarsGroup.children.forEach((child) => {
+      if (!child.isSprite) return;
+      child.userData.phase += dt * child.userData.speed;
+      child.position.y = child.userData.baseY + Math.sin(child.userData.phase) * 0.12;
+      const base = 0.35 + Math.sin(child.userData.phase * 0.7) * 0.15;
+      child.material.opacity = Math.min(1, base + boost * 0.55);
+    });
+
+    if (goalStarsLight) goalStarsLight.intensity = 0.3 + boost * 1.7;
+  }
+
+  function triggerGoalStarsGlow() {
+    arrivedGlowActive = true;
+    arrivedGlowTimer = 0;
+    if (goalStarsGroup && camera && typeof ParticleSystem !== 'undefined') {
+      const p = worldToScreen(goalStarsGroup.position);
+      if (p) {
+        ParticleSystem.emit('sparkle', p.x, p.y, 18, { life: 55, gravity: 0 });
+        ParticleSystem.emit('star', p.x, p.y, 10, { life: 70, gravity: -0.01, rise: true });
+      }
+    }
+  }
+
+  function resetGoalStarsGlow() {
+    arrivedGlowActive = false;
+    arrivedGlowTimer = 0;
+  }
+
+  function worldToScreen(vec3) {
+    if (!camera) return null;
+    const v = vec3.clone().project(camera);
+    if (v.z > 1) return null;
+    return { x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (1 - (v.y * 0.5 + 0.5)) * window.innerHeight };
   }
 
   /* ---------------------------------------------------------------
@@ -611,6 +633,9 @@ const World = (() => {
     shadowMesh.rotation.x = -Math.PI / 2;
     shadowMesh.position.y = 0.01;
     character.add(shadowMesh);
+
+    character.position.copy(IDLE_SPOT);
+    character.rotation.y = IDLE_YAW;
 
     scene.add(character);
     refreshReflection();
@@ -718,86 +743,119 @@ const World = (() => {
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
+  function faceDirection(dirX, dirZ, dt) {
+    const targetAngle = Math.atan2(dirX, dirZ);
+    let diff = targetAngle - character.rotation.y;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    character.rotation.y += diff * Math.min(1, dt * CHARACTER_CONFIG.turnSpeed);
+  }
+
+  // كل ما اقتربنا من النجوم، السرعة تقل تدريجيًا (لا توقف مفاجئ)
+  function computeSlowdownFactor() {
+    const distToEnd = character.position.distanceTo(RAIN_WALK.end);
+    if (distToEnd >= RAIN_WALK.approachSlowDistance) return 1;
+    const f = distToEnd / RAIN_WALK.approachSlowDistance;
+    return Math.max(RAIN_WALK.minSpeedFactor, f);
+  }
+
+  // تُستدعى من game.js لبدء مشي الشخصية تلقائيًا من بداية الطريق حتى النجوم
+  // callbacks: { onProgress(t 0..1), onArrived() } — onArrived تُستدعى مرة واحدة فقط
+  // بعد وصول الشخصية فعليًا ووقفتها السينمائية القصيرة
+  function startRainJourney(callbacks) {
+    rainCallbacks = callbacks || {};
+    if (!rainCurve) buildRainCurve();
+    rainDistance = 0;
+    stepDistanceAccum = 0;
+    resetGoalStarsGlow();
+    if (character) {
+      character.position.copy(RAIN_WALK.start);
+      const t0 = rainCurve.getTangentAt(0).normalize();
+      character.rotation.y = Math.atan2(t0.x, t0.z);
+    }
+    characterMode = 'walking';
+  }
+
+  // تُستدعى عند مغادرة مرحلة المطر (طبيعيًا أو بسبب إعادة البدء) لتصفير الحالة
+  function resetRainJourney() {
+    characterMode = 'idle';
+    rainCallbacks = {};
+    resetGoalStarsGlow();
+  }
+
+  function arriveAtStars() {
+    if (characterMode !== 'walking') return;
+    characterMode = 'arriving';
+    arrivePauseTimer = RAIN_WALK.arrivePause;
+    character.position.copy(RAIN_WALK.end);
+    const tEnd = rainCurve.getTangentAt(1).normalize();
+    character.rotation.y = Math.atan2(tEnd.x, tEnd.z);
+    triggerGoalStarsGlow();
+    AudioManager && AudioManager.sfx && AudioManager.sfx('achievement');
+  }
+
   function updateCharacter(dt) {
     if (!character) return;
     if (mixer) mixer.update(dt);
 
     let moving = false;
-    let running = false;
 
-    if (playerControlled) {
-      const input = getMoveInput();
-      const mag = Math.min(1, Math.hypot(input.x, input.z));
-      if (mag > 0.06) {
-        moving = true;
-        running = input.running;
-        const dirX = input.x / (Math.hypot(input.x, input.z) || 1);
-        const dirZ = input.z / (Math.hypot(input.x, input.z) || 1);
-        const speed = (running ? CHARACTER_CONFIG.runSpeed : CHARACTER_CONFIG.walkSpeed) * mag;
-        const moveX = dirX * speed * dt;
-        const moveZ = dirZ * speed * dt;
-        character.position.x = clamp(character.position.x + moveX, CHARACTER_CONFIG.bounds.minX, CHARACTER_CONFIG.bounds.maxX);
-        character.position.z = clamp(character.position.z + moveZ, CHARACTER_CONFIG.bounds.minZ, CHARACTER_CONFIG.bounds.maxZ);
+    if (characterMode === 'walking') {
+      moving = true;
+      const speedFactor = computeSlowdownFactor();
+      const step = RAIN_WALK.walkSpeed * speedFactor * dt;
+      rainDistance += step;
+      const t = clamp(rainCurveLength ? rainDistance / rainCurveLength : 1, 0, 1);
+      const pos = rainCurve.getPointAt(t);
+      const tangent = rainCurve.getTangentAt(t).normalize();
+      character.position.set(pos.x, 0, pos.z);
+      faceDirection(tangent.x, tangent.z, dt);
 
-        const targetAngle = Math.atan2(dirX, dirZ);
-        let diff = targetAngle - character.rotation.y;
-        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        character.rotation.y += diff * Math.min(1, dt * CHARACTER_CONFIG.turnSpeed);
-
-        stepDistanceAccum += Math.hypot(moveX, moveZ);
-        if (stepDistanceAccum > 1.0) {
-          AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
-          stepDistanceAccum = 0;
-        }
+      stepDistanceAccum += step;
+      if (stepDistanceAccum > 1.0) {
+        AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
+        stepDistanceAccum = 0;
       }
-    } else if (lateralMode) {
-      const targetX = CHARACTER_CONFIG.bounds.minX + lateralTargetX * (CHARACTER_CONFIG.bounds.maxX - CHARACTER_CONFIG.bounds.minX);
-      const prevX = character.position.x;
-      character.position.x += (targetX - prevX) * Math.min(1, dt * 6);
-      character.position.z = -4;
-      const dx = character.position.x - prevX;
-      if (Math.abs(dx) > 0.0008) {
-        moving = true;
-        const targetAngle = dx > 0 ? Math.PI / 2 * 0.6 : -Math.PI / 2 * 0.6;
-        character.rotation.y += (targetAngle - character.rotation.y) * Math.min(1, dt * 6);
-        stepDistanceAccum += Math.abs(dx);
-        if (stepDistanceAccum > 0.8) {
-          AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
-          stepDistanceAccum = 0;
+
+      if (rainCallbacks.onProgress) rainCallbacks.onProgress(t);
+
+      const distToEnd = character.position.distanceTo(RAIN_WALK.end);
+      if (t >= 1 || distToEnd < RAIN_WALK.arriveThreshold) {
+        arriveAtStars();
+      }
+    } else if (characterMode === 'arriving') {
+      moving = false;
+      arrivePauseTimer -= dt;
+      if (arrivePauseTimer <= 0) {
+        characterMode = 'arrived';
+        if (rainCallbacks.onArrived) {
+          const cb = rainCallbacks.onArrived;
+          rainCallbacks.onArrived = null;
+          cb();
         }
       }
     } else {
-      // سلوك سينمائي تلقائي (بدون تحكم اللاعب) — نفس المسار المنحني القديم
-      if (isPaused) {
-        pauseTimer -= dt;
-        if (pauseTimer <= 0) isPaused = false;
-      } else {
-        pathT += dt * 0.012;
-        if (pathT > 1) pathT -= 1;
-        if (Math.random() < 0.0022) { isPaused = true; pauseTimer = 0.7 + Math.random() * 0.9; }
-      }
-      const pos = pathCurve.getPointAt(((pathT % 1) + 1) % 1);
-      const tangent = pathCurve.getTangentAt(((pathT % 1) + 1) % 1);
-      character.position.set(pos.x, 0, pos.z);
-      character.rotation.y = Math.atan2(tangent.x, tangent.z);
-      moving = !isPaused;
-
-      if (rimLight) {
-        rimLight.position.set(character.position.x - tangent.z * 1.2, 1.6, character.position.z + tangent.x * 1.2);
-        rimLight.target.position.copy(character.position);
-        rimLight.target.updateMatrixWorld();
-      }
+      // 'idle' أو 'arrived' -> واقفة ثابتة تمامًا، بدون أي تأثير من الماوس/اللمس/الكيبورد
+      moving = false;
     }
 
     // أنيميشن حقيقي لو الموديل جاهز، وإلا bounce بسيط على الـ placeholder فقط
     if (modelReady) {
-      setAnimState(moving ? (running ? 'run' : 'walk') : 'idle');
+      setAnimState(moving ? 'walk' : 'idle');
     } else {
       charMixerState.stepPhase += moving ? dt * 7 : dt * 1.2;
       charMixerState.bob = Math.abs(Math.sin(charMixerState.stepPhase)) * (moving ? 0.05 : 0.01);
       const ph = charModelGroup.getObjectByName('placeholder');
       if (ph) ph.position.y = charMixerState.bob;
     }
+
+    if (rimLight) {
+      const facing = new THREE.Vector3(Math.sin(character.rotation.y), 0, Math.cos(character.rotation.y));
+      rimLight.position.set(character.position.x - facing.z * 1.2, 1.6, character.position.z + facing.x * 1.2);
+      rimLight.target.position.copy(character.position);
+      rimLight.target.updateMatrixWorld();
+    }
+
+    updateGoalStars(dt);
 
     const refl = character.userData.reflection;
     if (refl) { refl.position.copy(character.position); refl.rotation.copy(character.rotation); }
@@ -977,21 +1035,33 @@ const World = (() => {
     const idleY = 3.4 + Math.sin(camTime * 0.06) * 0.15;
 
     let targetPos, lookAt;
+    const inRainJourney = currentScreen === 'stage3' &&
+      (characterMode === 'walking' || characterMode === 'arriving' || characterMode === 'arrived');
+
     if (currentScreen === 'stage5' && giftGroup) {
       targetPos = new THREE.Vector3(giftGroup.position.x + 1.4, 1.5, giftGroup.position.z + 2.6);
       lookAt = new THREE.Vector3(giftGroup.position.x, 0.6, giftGroup.position.z);
-    } else if (playerControlled && character) {
-      // كاميرا Third-Person حقيقية تتبع اتجاه الشخصية بنعومة
-      const back = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), character.rotation.y).multiplyScalar(4.4);
-      targetPos = character.position.clone().add(back).add(new THREE.Vector3(0, 2.5, 0));
+    } else if (inRainJourney && character) {
+      // كاميرا سينمائية ناعمة تتبع الشخصية أثناء مشيها تجاه النجوم، وتقترب قليلًا عند الوصول
+      const facing = new THREE.Vector3(Math.sin(character.rotation.y), 0, Math.cos(character.rotation.y));
+      const arrived = characterMode !== 'walking';
+      const followDist = arrived ? 3.1 : 4.6;
+      const heightOff = arrived ? 1.9 : 2.3;
+      targetPos = character.position.clone()
+        .add(facing.clone().multiplyScalar(-followDist))
+        .add(new THREE.Vector3(0, heightOff, 0));
       lookAt = character.position.clone().add(new THREE.Vector3(0, 1.3, 0));
+      if (arrived && goalStarsGroup) {
+        lookAt.lerp(goalStarsGroup.position, 0.4);
+      }
     } else if (currentScreen === 'intro') {
       targetPos = new THREE.Vector3(idleX, idleY, 10);
       lookAt = new THREE.Vector3(0, 1.6, -6);
     } else {
-      const behind = character ? character.position.clone() : new THREE.Vector3();
-      targetPos = new THREE.Vector3(behind.x + idleX * 0.4, 2.4, behind.z + 4.2);
-      lookAt = new THREE.Vector3(behind.x, 1.1, behind.z - 2);
+      // شاشات ثابتة (البداية بدون تشغيل بعد، المرحلة ١، ٢، ٤): الشخصية Idle فقط
+      const p = character ? character.position : IDLE_SPOT;
+      targetPos = new THREE.Vector3(p.x + idleX * 0.4, 2.4, p.z + 4.2);
+      lookAt = new THREE.Vector3(p.x, 1.1, p.z - 2);
     }
     camera.position.lerp(targetPos, 1 - Math.pow(0.0008, dt));
     const curLook = camera.userData.look || lookAt.clone();
@@ -1032,10 +1102,8 @@ const World = (() => {
      واجهة عامة
   --------------------------------------------------------------- */
   function setScreen(name) {
+    const leavingRain = currentScreen === 'stage3' && name !== 'stage3';
     currentScreen = name;
-    playerControlled = (name === 'intro');
-    lateralMode = (name === 'stage3');
-    setJoystickVisible(playerControlled);
 
     if (name === 'stage5') {
       buildGiftBox();
@@ -1044,16 +1112,15 @@ const World = (() => {
       giftGroup.visible = false;
     }
 
-    if (name === 'stage3' && character) {
-      // ابدئي مرحلة المطر من منتصف الطريق تقريبًا
-      lateralTargetX = 0.5;
+    // أي شاشة غير مرحلة المطر: الشخصية ثابتة (Idle) في مكانها المخصص، بدون أي حركة
+    if (name !== 'stage3') {
+      if (leavingRain) resetRainJourney();
+      characterMode = 'idle';
+      if (character) {
+        character.position.copy(IDLE_SPOT);
+        character.rotation.y = IDLE_YAW;
+      }
     }
-  }
-
-  // تُستدعى من game.js (مرحلة المطر) بدل رسم شخصية Emoji مسطحة على الكانفاس 2D
-  // value: رقم بين 0 و 1 يمثل موضع اللاعب الأفقي على الشاشة
-  function setLateralX(value) {
-    lateralTargetX = clamp(value, 0, 1);
   }
 
   function triggerGiftOpen(cb) {
@@ -1075,10 +1142,10 @@ const World = (() => {
     init,
     resize,
     setScreen,
-    setLateralX,
+    startRainJourney,
+    resetRainJourney,
     triggerGiftOpen,
     markGiftOpened,
     get isReady() { return ready; },
-    get isPlayerControlled() { return playerControlled; },
   };
 })();

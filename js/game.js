@@ -321,13 +321,12 @@ const Game = (() => {
   const Stage3 = (() => {
     let canvas, ctx, raf;
     let width, height, dpr = 1;
-    let player = { x: 0, y: 0, r: 22 };
     let active = false;
     let messageIndex = 0;
-    let stepDistance = 0;
-    let lastX = 0;
     let converting = false;
     let convertProgress = 0;
+    let arrived = false;
+    let fallbackTimer = null;
 
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -336,51 +335,38 @@ const Game = (() => {
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (player.x === 0) { player.x = width / 2; player.y = height * 0.7; lastX = player.x; }
     }
 
-    function movePlayer(x) {
-      const prev = player.x;
-      player.x = Math.max(player.r, Math.min(width - player.r, x));
-      stepDistance += Math.abs(player.x - prev);
-      // اللاعبة تتمثّل بالشخصية 3D الحقيقية خلف الكانفاس (مش Emoji)، فبنبعت موضعها الأفقي للعالم الثلاثي
-      if (typeof World !== 'undefined' && World.isReady) {
-        World.setLateralX(player.x / width);
-      }
-      if (stepDistance > 90 && messageIndex < RAIN_MESSAGES.length) {
-        showNextMessage();
-        stepDistance = 0;
+    function showMessage(text) {
+      if (callbacks.onStageMessage) callbacks.onStageMessage('stage3', text);
+    }
+
+    // تُستدعى بنسبة تقدّم الشخصية على الطريق (0..1) لإظهار الرسائل تباعًا أثناء مشيها تلقائيًا
+    function onWalkProgress(t) {
+      const n = RAIN_MESSAGES.length;
+      const nextThreshold = (messageIndex + 0.4) / n;
+      if (messageIndex < n && t >= nextThreshold) {
+        showMessage(RAIN_MESSAGES[messageIndex]);
+        messageIndex++;
       }
     }
 
-    function onPointerMove(e) {
-      const rect = canvas.getBoundingClientRect();
-      const p = e.touches ? e.touches[0] : e;
-      if (!p) return;
-      movePlayer(p.clientX - rect.left);
-    }
-    function onPointerDown(e) { onPointerMove(e); }
-
-    const keys = {};
-    function onKeyDown(e) { keys[e.key] = true; }
-    function onKeyUp(e) { keys[e.key] = false; }
-
-    function showNextMessage() {
-      const msg = RAIN_MESSAGES[messageIndex];
-      messageIndex++;
-      if (callbacks.onStageMessage) callbacks.onStageMessage('stage3', msg);
-      if (messageIndex >= RAIN_MESSAGES.length) {
-        setTimeout(startConversion, 1800);
+    // تُستدعى مرة واحدة فقط: الشخصية وصلت فعليًا للنجوم بعد الوقفة السينمائية القصيرة
+    function onWalkArrived() {
+      if (arrived) return;
+      arrived = true;
+      // اعرضي أي رسالة متبقية قبل بدء تحويل المطر لقلوب ونجوم
+      while (messageIndex < RAIN_MESSAGES.length) {
+        showMessage(RAIN_MESSAGES[messageIndex]);
+        messageIndex++;
       }
+      startConversion();
     }
 
     function startConversion() {
       converting = true;
       convertProgress = 0;
     }
-
-    // ملحوظة: الشخصية بقت 3D حقيقية تتحرك في العالم خلف الكانفاس الشفاف
-    // (World.setLateralX)، فمابقيناش نرسم أي Emoji أو شكل مسطح كلاعبة هنا.
 
     function finishStage() {
       active = false;
@@ -394,9 +380,6 @@ const Game = (() => {
       if (!active) return;
       ctx.clearRect(0, 0, width, height);
 
-      if (keys['ArrowLeft'])  movePlayer(player.x - 6);
-      if (keys['ArrowRight']) movePlayer(player.x + 6);
-
       if (!converting) {
         ParticleSystem.emitRain(1);
       } else {
@@ -407,11 +390,9 @@ const Game = (() => {
           ParticleSystem.emit('star', Math.random() * width, height + 10, 1,
             { life: 90, vy: -(1.5 + Math.random() * 1.5), gravity: -0.01, size: 6 + Math.random() * 6 });
         }
-        if (convertProgress > 150) {
+        if (convertProgress > 150 && active) {
           finishStage();
-          if (callbacks.onStageMessage) {
-            callbacks.onStageMessage('stage3', 'والمطر بقى قلوب ونجوم... زي إحساسي معاكِ ✨');
-          }
+          showMessage('والمطر بقى قلوب ونجوم... زي إحساسي معاكِ ✨');
         }
       }
 
@@ -425,21 +406,29 @@ const Game = (() => {
       converting = false;
       convertProgress = 0;
       messageIndex = 0;
-      stepDistance = 0;
-      player.x = 0;
+      arrived = false;
       ParticleSystem.clear('rain');
       resize();
-
-      canvas.addEventListener('touchstart', onPointerDown, { passive: true });
-      canvas.addEventListener('touchmove', onPointerMove, { passive: true });
-      canvas.addEventListener('mousedown', onPointerDown);
-      canvas.addEventListener('mousemove', onPointerMove);
-      window.addEventListener('keydown', onKeyDown);
-      window.addEventListener('keyup', onKeyUp);
       window.addEventListener('resize', resize);
 
-      // رسالة ترحيبية أولى
-      setTimeout(() => showNextMessage(), 800);
+      // الشخصية 3D تمشي تلقائيًا بمفردها من بداية الطريق حتى النجوم — بدون أي تحكم باللمس/الماوس/الكيبورد
+      if (typeof World !== 'undefined' && World.isReady) {
+        World.startRainJourney({ onProgress: onWalkProgress, onArrived: onWalkArrived });
+      } else {
+        // Fallback بدون WebGL: نفس تسلسل الرسائل لكن بتوقيت زمني ثابت بدل مشي 3D حقيقي
+        let i = 0;
+        const revealNext = () => {
+          if (!active) return;
+          if (i < RAIN_MESSAGES.length) {
+            showMessage(RAIN_MESSAGES[i]);
+            i++;
+            fallbackTimer = setTimeout(revealNext, 1900);
+          } else {
+            onWalkArrived();
+          }
+        };
+        fallbackTimer = setTimeout(revealNext, 900);
+      }
 
       raf = requestAnimationFrame(loop);
     }
@@ -447,14 +436,10 @@ const Game = (() => {
     function stop() {
       active = false;
       if (raf) cancelAnimationFrame(raf);
+      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
       ParticleSystem.clear('rain');
-      canvas.removeEventListener('touchstart', onPointerDown);
-      canvas.removeEventListener('touchmove', onPointerMove);
-      canvas.removeEventListener('mousedown', onPointerDown);
-      canvas.removeEventListener('mousemove', onPointerMove);
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', resize);
+      if (typeof World !== 'undefined' && World.isReady) World.resetRainJourney();
     }
 
     return { start, stop };
