@@ -15,7 +15,12 @@ const AudioManager = (() => {
     achievement:  'assets/audio/achievement-unlock.mp3',
     giftOpen:     'assets/audio/gift-open.mp3',
     celebration:  'assets/audio/final-celebration.mp3',
+    footstep:     'assets/audio/footstep.mp3',
+    rainAmbient:  'assets/audio/rain-ambient.mp3',
   };
+
+  let ambientEl = null;
+  let ambientOn = false;
 
   let musicEl = null;
   let musicOn = true;
@@ -40,16 +45,34 @@ const AudioManager = (() => {
       musicEl.loop = true;
       musicEl.volume = 0.45;
     }
+    ambientEl = safeAudio(FILES.rainAmbient);
+    if (ambientEl) {
+      ambientEl.loop = true;
+      ambientEl.volume = 0.28;
+    }
     Object.keys(FILES).forEach(key => {
-      if (key === 'music') return;
+      if (key === 'music' || key === 'rainAmbient') return;
       sfxCache[key] = safeAudio(FILES[key]);
     });
+  }
+
+  // صوت مطر مستمر خفيف في الخلفية أثناء العالم الليلي الممطر (كل الشاشات ما عدا البداية)
+  function setRainAmbient(on) {
+    ambientOn = on;
+    if (!ambientEl || ambientEl.__broken || !unlocked) return;
+    if (on) {
+      const p = ambientEl.play();
+      if (p && p.catch) p.catch(() => {});
+    } else {
+      ambientEl.pause();
+    }
   }
 
   function unlockOnFirstInteraction() {
     if (unlocked) return;
     unlocked = true;
     if (musicOn) playMusic();
+    if (ambientOn) setRainAmbient(true);
   }
 
   function playMusic() {
@@ -92,6 +115,7 @@ const AudioManager = (() => {
     pauseMusic,
     toggleMusic,
     setMusicOn,
+    setRainAmbient,
     sfx,
     get isMusicOn() { return musicOn; },
   };

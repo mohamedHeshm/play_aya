@@ -166,6 +166,8 @@ const CONFIG = {
 
     restartBtn.classList.toggle('hidden', name === 'intro');
 
+    AudioManager.setRainAmbient(name !== 'intro');
+
     if (World && World.isReady !== undefined) World.setScreen(name);
 
     startScreenLogic(name);

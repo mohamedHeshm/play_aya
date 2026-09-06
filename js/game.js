@@ -343,6 +343,10 @@ const Game = (() => {
       const prev = player.x;
       player.x = Math.max(player.r, Math.min(width - player.r, x));
       stepDistance += Math.abs(player.x - prev);
+      // اللاعبة تتمثّل بالشخصية 3D الحقيقية خلف الكانفاس (مش Emoji)، فبنبعت موضعها الأفقي للعالم الثلاثي
+      if (typeof World !== 'undefined' && World.isReady) {
+        World.setLateralX(player.x / width);
+      }
       if (stepDistance > 90 && messageIndex < RAIN_MESSAGES.length) {
         showNextMessage();
         stepDistance = 0;
@@ -375,16 +379,8 @@ const Game = (() => {
       convertProgress = 0;
     }
 
-    function drawPlayer() {
-      ctx.save();
-      ctx.font = `${player.r * 2}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(185,139,139,0.3)';
-      ctx.shadowBlur = 8;
-      ctx.fillText('🚶‍♀️', player.x, player.y);
-      ctx.restore();
-    }
+    // ملحوظة: الشخصية بقت 3D حقيقية تتحرك في العالم خلف الكانفاس الشفاف
+    // (World.setLateralX)، فمابقيناش نرسم أي Emoji أو شكل مسطح كلاعبة هنا.
 
     function finishStage() {
       active = false;
@@ -419,7 +415,6 @@ const Game = (() => {
         }
       }
 
-      drawPlayer();
       raf = requestAnimationFrame(loop);
     }
 

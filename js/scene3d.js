@@ -8,6 +8,19 @@
 
 const World = (() => {
 
+  // ✏️ الشخصية 3D — ضعي ملف الموديل بتاعك هنا (GLB مُجهّز Rigged + Animations)
+  // الموديل الحالي placeholder مجاني (CC-BY) لحد ما تستبدليه بموديل نهائي مناسب للأجواء الرومانسية
+  const CHARACTER_CONFIG = {
+    url: 'assets/models/character.glb',
+    targetHeight: 1.7,        // ارتفاع الشخصية بوحدات العالم (متر تقريبًا)
+    modelYawOffset: Math.PI,  // ✏️ لو الشخصية بتمشي بظهرها، جربي 0 بدل Math.PI
+    walkSpeed: 2.0,
+    runSpeed: 4.2,
+    runThreshold: 0.85,       // نسبة دفع الجويستيك/الكيبورد اللي تحوّل المشي لجري
+    turnSpeed: 8,             // سرعة استدارة الجسم نحو اتجاه الحركة (كل ما زاد كل ما كانت الاستدارة أسرع وأنعم)
+    bounds: { minX: -3.2, maxX: 3.2, minZ: -26, maxZ: 7 }, // حدود المشي داخل الطريق
+  };
+
   let renderer, scene, camera, clock;
   let canvas;
   let raf = null;
@@ -24,12 +37,23 @@ const World = (() => {
   let ground, reflectionGroup;
   let rainMesh, rainDummy, rainData = [];
   let splashPool = [];
-  let character, charMixerState;
+  let envProps = [];
+  let character, charModelGroup, charMixerState;
+  let mixer = null, actions = {}, currentAction = null, animState = 'idle';
+  let modelReady = false;
   let giftBox, giftLid, giftGroup, giftPivot, giftHeartsPool = [];
   let pathCurve;
   let pathT = 0;
   let pauseTimer = 0;
   let isPaused = false;
+
+  // ---------------- وضع التحكم باللاعب (Player Controlled Third-Person) ----------------
+  let playerControlled = false;   // true في شاشة البداية: تحكم حر بالجويستيك/الكيبورد
+  let lateralMode = false;        // true في مرحلة المطر: تحكم أفقي بسيط (يمين/يسار) يتحكم فيه game.js
+  let lateralTargetX = 0;         // 0..1 قادمة من game.js -> تتحول لإحداثية X داخل bounds
+  const keyState = {};
+  const joystick = { active: false, x: 0, y: 0, pointerId: null, centerX: 0, centerY: 0, maxRadius: 42 };
+  let stepDistanceAccum = 0;
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -94,10 +118,12 @@ const World = (() => {
     buildMoon();
     buildClouds();
     buildGround();
+    buildEnvironmentProps();
     buildRain();
     buildCharacterPath();
     buildCharacter();
     buildLights();
+    setupInput();
 
     window.addEventListener('resize', resize);
     canvas.addEventListener('pointerdown', onPointerDown, { passive: true });
@@ -105,6 +131,173 @@ const World = (() => {
     ready = true;
     loop();
     return true;
+  }
+
+  /* ---------------------------------------------------------------
+     عناصر بيئية على جانبي الطريق — أشجار وأعمدة إنارة ومباني بسيطة
+     (Low-poly, بدون أي إضاءات ديناميكية إضافية للحفاظ على الأداء)
+  --------------------------------------------------------------- */
+  function buildEnvironmentProps() {
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.9 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x1c2a22, roughness: 0.85 });
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x22223a, roughness: 0.5, metalness: 0.3 });
+    const lampGlowMat = new THREE.MeshBasicMaterial({ color: 0xffdfa8, fog: false });
+    const buildingMat = new THREE.MeshStandardMaterial({ color: 0x171633, roughness: 0.8 });
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0xffe9bd, fog: false, transparent: true, opacity: 0.75 });
+
+    function addTree(x, z) {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.4, 6), trunkMat);
+      trunk.position.y = 0.7;
+      g.add(trunk);
+      const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.75, 1.8, 7), leafMat);
+      leaves.position.y = 2.0;
+      g.add(leaves);
+      const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.3, 7), leafMat);
+      leaves2.position.y = 2.7;
+      g.add(leaves2);
+      g.position.set(x, 0, z);
+      scene.add(g);
+      envProps.push(g);
+    }
+
+    function addLamp(x, z) {
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.4, 6), poleMat);
+      pole.position.y = 1.2;
+      g.add(pole);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.04), poleMat);
+      arm.position.set(x < 0 ? 0.14 : -0.14, 2.35, 0);
+      g.add(arm);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), lampGlowMat);
+      glow.position.set(x < 0 ? 0.28 : -0.28, 2.32, 0);
+      g.add(glow);
+      // هالة ناعمة بدون إضاءة ديناميكية حقيقية (Sprite بدل PointLight للحفاظ على الأداء)
+      const haloTex = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 64;
+        const cx = c.getContext('2d');
+        const rg = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        rg.addColorStop(0, 'rgba(255,223,168,0.5)');
+        rg.addColorStop(1, 'rgba(255,223,168,0)');
+        cx.fillStyle = rg; cx.fillRect(0, 0, 64, 64);
+        return new THREE.CanvasTexture(c);
+      })();
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, fog: false }));
+      halo.scale.set(1.4, 1.4, 1);
+      halo.position.copy(glow.position);
+      g.add(halo);
+      g.position.set(x, 0, z);
+      scene.add(g);
+      envProps.push(g);
+    }
+
+    function addBuilding(x, z, w, h, d) {
+      const g = new THREE.Group();
+      const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
+      box.position.y = h / 2;
+      g.add(box);
+      const rows = Math.floor(h / 0.6);
+      for (let r = 0; r < rows; r++) {
+        if (Math.random() < 0.4) continue;
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.35), windowMat);
+        win.position.set(w / 2 + 0.01, 0.5 + r * 0.6, (Math.random() - 0.5) * d * 0.6);
+        win.rotation.y = Math.PI / 2;
+        g.add(win);
+      }
+      g.position.set(x, 0, z);
+      scene.add(g);
+      envProps.push(g);
+    }
+
+    const roadHalf = lowPower ? 6 : 9;
+    const count = lowPower ? 5 : 9;
+    for (let i = 0; i < count; i++) {
+      const z = 4 - i * 5.5;
+      addTree(-roadHalf - Math.random() * 2, z + (Math.random() - 0.5) * 2);
+      addTree(roadHalf + Math.random() * 2, z + (Math.random() - 0.5) * 2);
+      if (i % 2 === 0) {
+        addLamp(-3.4, z);
+        addLamp(3.4, z - 2.5);
+      }
+    }
+    if (!lowPower) {
+      addBuilding(-11, -8, 5, 6, 6);
+      addBuilding(11, -14, 6, 8, 6);
+      addBuilding(-12, -22, 5.5, 5, 5);
+    }
+  }
+
+  /* ---------------------------------------------------------------
+     مدخلات اللاعب — Keyboard (WASD/Arrows) + Joystick افتراضي للموبايل
+  --------------------------------------------------------------- */
+  function setupInput() {
+    window.addEventListener('keydown', (e) => { keyState[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', (e) => { keyState[e.key.toLowerCase()] = false; });
+
+    const zone = document.getElementById('joystick-zone');
+    const stick = document.getElementById('joystick-stick');
+    if (!zone || !stick) return;
+
+    function setStickVisual(dx, dy) {
+      stick.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+
+    zone.addEventListener('pointerdown', (e) => {
+      if (!playerControlled) return;
+      joystick.active = true;
+      joystick.pointerId = e.pointerId;
+      const rect = zone.getBoundingClientRect();
+      joystick.centerX = rect.left + rect.width / 2;
+      joystick.centerY = rect.top + rect.height / 2;
+      zone.setPointerCapture(e.pointerId);
+      updateJoystickFromEvent(e);
+    });
+    zone.addEventListener('pointermove', (e) => {
+      if (!joystick.active || e.pointerId !== joystick.pointerId) return;
+      updateJoystickFromEvent(e);
+    });
+    function endJoystick(e) {
+      if (e.pointerId !== joystick.pointerId) return;
+      joystick.active = false;
+      joystick.x = 0; joystick.y = 0;
+      setStickVisual(0, 0);
+    }
+    zone.addEventListener('pointerup', endJoystick);
+    zone.addEventListener('pointercancel', endJoystick);
+
+    function updateJoystickFromEvent(e) {
+      let dx = e.clientX - joystick.centerX;
+      let dy = e.clientY - joystick.centerY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > joystick.maxRadius) {
+        dx = (dx / dist) * joystick.maxRadius;
+        dy = (dy / dist) * joystick.maxRadius;
+      }
+      setStickVisual(dx, dy);
+      joystick.x = dx / joystick.maxRadius;
+      joystick.y = dy / joystick.maxRadius;
+    }
+  }
+
+  function getMoveInput() {
+    // الكيبورد له الأولوية لو مضغوط، وإلا نستخدم الجويستيك
+    let x = 0, z = 0;
+    if (keyState['arrowleft'] || keyState['a']) x -= 1;
+    if (keyState['arrowright'] || keyState['d']) x += 1;
+    if (keyState['arrowup'] || keyState['w']) z -= 1;
+    if (keyState['arrowdown'] || keyState['s']) z += 1;
+    const usingKeyboard = x !== 0 || z !== 0;
+    if (!usingKeyboard && joystick.active) {
+      x = joystick.x;
+      z = joystick.y;
+    }
+    const running = usingKeyboard ? (keyState['shift'] || false) : (Math.hypot(x, z) > CHARACTER_CONFIG.runThreshold);
+    return { x, z, running };
+  }
+
+  function setJoystickVisible(show) {
+    const zone = document.getElementById('joystick-zone');
+    if (zone) zone.classList.toggle('hidden', !show);
   }
 
   function fallback() {
@@ -387,53 +580,20 @@ const World = (() => {
   }
 
   /* ---------------------------------------------------------------
-     الشخصية — نموذج stylized بسيط بالـ geometry (بدون Emoji)
+     الشخصية — 3D Character Model حقيقي (GLB/GLTF) Rigged + Animations
+     Idle / Walking / Running عبر AnimationMixer، مع placeholder مؤقت
+     (كبسولة بسيطة بدون Emoji) لحد ما يخلص تحميل الموديل، وكـ fallback
+     دائم لو تعذّر تحميل الملف بدون ما نكسر اللعبة
   --------------------------------------------------------------- */
   function buildCharacter() {
     character = new THREE.Group();
+    charModelGroup = new THREE.Group();
+    charModelGroup.name = 'charModel';
+    character.add(charModelGroup);
 
-    const skin = new THREE.MeshStandardMaterial({ color: 0xf1d9c9, roughness: 0.6 });
-    const dress = new THREE.MeshStandardMaterial({ color: 0xb9857f, roughness: 0.55 });
-    const hair = new THREE.MeshStandardMaterial({ color: 0x2c2130, roughness: 0.5 });
+    buildPlaceholderCharacter();
 
-    const body = new THREE.Group();
-    body.name = 'body';
-
-    const torso = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.85, 10), dress);
-    torso.position.y = 0.95;
-    body.add(torso);
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 12), skin);
-    head.position.y = 1.55;
-    body.add(head);
-
-    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.255, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), hair);
-    hairCap.position.y = 1.58;
-    body.add(hairCap);
-
-    const armGeo = new THREE.CylinderGeometry(0.045, 0.04, 0.5, 8);
-    const armL = new THREE.Mesh(armGeo, skin);
-    armL.name = 'armL';
-    armL.position.set(-0.32, 1.15, 0);
-    armL.geometry.translate(0, -0.25, 0);
-    const armR = armL.clone();
-    armR.name = 'armR';
-    armR.position.x = 0.32;
-    body.add(armL, armR);
-
-    const legGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.55, 8);
-    const legL = new THREE.Mesh(legGeo, skin);
-    legL.name = 'legL';
-    legL.position.set(-0.12, 0.55, 0);
-    legL.geometry.translate(0, -0.275, 0);
-    const legR = legL.clone();
-    legR.name = 'legR';
-    legR.position.x = 0.12;
-    body.add(legL, legR);
-
-    character.add(body);
-
-    // ظل ناعم أسفل الشخصية
+    // ظل ناعم أسفل الشخصية (يبقى موجود دايمًا تحت أي موديل)
     const shadowTex = (() => {
       const c = document.createElement('canvas'); c.width = c.height = 64;
       const cx = c.getContext('2d');
@@ -447,65 +607,196 @@ const World = (() => {
       new THREE.CircleGeometry(0.42, 16),
       new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
     );
+    shadowMesh.name = 'charShadow';
     shadowMesh.rotation.x = -Math.PI / 2;
     shadowMesh.position.y = 0.01;
     character.add(shadowMesh);
 
     scene.add(character);
+    refreshReflection();
 
-    // انعكاس خفيف على الأرض المبللة
+    charMixerState = { bob: 0, stepPhase: 0 };
+
+    loadCharacterModel();
+  }
+
+  // Placeholder مؤقت: شكل هندسي بسيط (كبسولة + رأس) بدون أي Emoji إطلاقًا
+  function buildPlaceholderCharacter() {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xb9857f, roughness: 0.6 });
+    const g = new THREE.Group();
+    g.name = 'placeholder';
+    const bodyGeo = (typeof THREE.CapsuleGeometry === 'function')
+      ? new THREE.CapsuleGeometry(0.26, 0.7, 4, 8)
+      : new THREE.CylinderGeometry(0.26, 0.26, 1.0, 10);
+    const body = new THREE.Mesh(bodyGeo, mat);
+    body.position.y = 0.85;
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), mat);
+    head.position.y = 1.55;
+    g.add(head);
+    charModelGroup.add(g);
+  }
+
+  function loadCharacterModel() {
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      console.warn('GLTFLoader غير محمّل — الشخصية هتفضل بالشكل البديل البسيط.');
+      return;
+    }
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      CHARACTER_CONFIG.url,
+      (gltf) => onCharacterModelLoaded(gltf),
+      undefined,
+      (err) => {
+        console.warn('تعذّر تحميل موديل الشخصية 3D، هيستمر استخدام الشكل البديل:', err && err.message);
+      }
+    );
+  }
+
+  function onCharacterModelLoaded(gltf) {
+    const model = gltf.scene;
+    model.traverse((o) => { if (o.isMesh) { o.frustumCulled = true; } });
+
+    // تحجيم الموديل ليطابق الطول المطلوب + إلصاق القدمين بالأرض
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const scale = CHARACTER_CONFIG.targetHeight / (size.y || 1);
+    model.scale.setScalar(scale);
+    const box2 = new THREE.Box3().setFromObject(model);
+    model.position.y -= box2.min.y;
+    model.rotation.y = CHARACTER_CONFIG.modelYawOffset;
+
+    // إزالة الـ placeholder واستبداله بالموديل الحقيقي
+    const placeholder = charModelGroup.getObjectByName('placeholder');
+    if (placeholder) charModelGroup.remove(placeholder);
+    charModelGroup.add(model);
+    modelReady = true;
+
+    // ربط الأنيميشن
+    mixer = new THREE.AnimationMixer(model);
+    actions = {};
+    (gltf.animations || []).forEach((clip) => {
+      const key = clip.name.toLowerCase();
+      if (key.includes('idle') || key.includes('standing')) actions.idle = actions.idle || mixer.clipAction(clip);
+      else if (key.includes('run')) actions.run = actions.run || mixer.clipAction(clip);
+      else if (key.includes('walk')) actions.walk = actions.walk || mixer.clipAction(clip);
+    });
+    animState = 'idle';
+    currentAction = actions.idle || actions.walk || null;
+    if (currentAction) currentAction.play();
+
+    refreshReflection();
+  }
+
+  // انعكاس خفيف على الأرض المبللة — يُعاد بناؤه كل مرة يتغير فيها شكل الشخصية (placeholder <-> model)
+  function refreshReflection() {
+    if (!character || !reflectionGroup) return;
+    const old = character.userData.reflection;
+    if (old) { reflectionGroup.remove(old); }
     const reflectionChar = character.clone(true);
-    reflectionChar.traverse(o => {
-      if (o.isMesh && o.material && o.material.map !== shadowTex) {
+    reflectionChar.traverse((o) => {
+      if (o.isMesh && o.material) {
         o.material = o.material.clone();
         o.material.transparent = true;
-        o.material.opacity = 0.16;
+        o.material.opacity = o.name === 'charShadow' ? 0 : 0.16;
       }
     });
     reflectionGroup.add(reflectionChar);
     character.userData.reflection = reflectionChar;
-
-    charMixerState = { bob: 0, stepPhase: 0 };
   }
+
+  function setAnimState(name) {
+    if (!mixer) return; // لسه بنستخدم الـ placeholder، مفيش أنيميشن حقيقي
+    const next = actions[name] || actions.idle || actions.walk || actions.run;
+    if (!next || next === currentAction) { animState = name; return; }
+    if (currentAction) currentAction.fadeOut(0.25);
+    next.reset().fadeIn(0.25).play();
+    currentAction = next;
+    animState = name;
+  }
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
   function updateCharacter(dt) {
     if (!character) return;
+    if (mixer) mixer.update(dt);
 
-    if (isPaused) {
-      pauseTimer -= dt;
-      if (pauseTimer <= 0) isPaused = false;
+    let moving = false;
+    let running = false;
+
+    if (playerControlled) {
+      const input = getMoveInput();
+      const mag = Math.min(1, Math.hypot(input.x, input.z));
+      if (mag > 0.06) {
+        moving = true;
+        running = input.running;
+        const dirX = input.x / (Math.hypot(input.x, input.z) || 1);
+        const dirZ = input.z / (Math.hypot(input.x, input.z) || 1);
+        const speed = (running ? CHARACTER_CONFIG.runSpeed : CHARACTER_CONFIG.walkSpeed) * mag;
+        const moveX = dirX * speed * dt;
+        const moveZ = dirZ * speed * dt;
+        character.position.x = clamp(character.position.x + moveX, CHARACTER_CONFIG.bounds.minX, CHARACTER_CONFIG.bounds.maxX);
+        character.position.z = clamp(character.position.z + moveZ, CHARACTER_CONFIG.bounds.minZ, CHARACTER_CONFIG.bounds.maxZ);
+
+        const targetAngle = Math.atan2(dirX, dirZ);
+        let diff = targetAngle - character.rotation.y;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        character.rotation.y += diff * Math.min(1, dt * CHARACTER_CONFIG.turnSpeed);
+
+        stepDistanceAccum += Math.hypot(moveX, moveZ);
+        if (stepDistanceAccum > 1.0) {
+          AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
+          stepDistanceAccum = 0;
+        }
+      }
+    } else if (lateralMode) {
+      const targetX = CHARACTER_CONFIG.bounds.minX + lateralTargetX * (CHARACTER_CONFIG.bounds.maxX - CHARACTER_CONFIG.bounds.minX);
+      const prevX = character.position.x;
+      character.position.x += (targetX - prevX) * Math.min(1, dt * 6);
+      character.position.z = -4;
+      const dx = character.position.x - prevX;
+      if (Math.abs(dx) > 0.0008) {
+        moving = true;
+        const targetAngle = dx > 0 ? Math.PI / 2 * 0.6 : -Math.PI / 2 * 0.6;
+        character.rotation.y += (targetAngle - character.rotation.y) * Math.min(1, dt * 6);
+        stepDistanceAccum += Math.abs(dx);
+        if (stepDistanceAccum > 0.8) {
+          AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
+          stepDistanceAccum = 0;
+        }
+      }
     } else {
-      pathT += dt * 0.012;
-      if (pathT > 1) pathT -= 1;
-      if (Math.random() < 0.0022) { isPaused = true; pauseTimer = 0.7 + Math.random() * 0.9; }
+      // سلوك سينمائي تلقائي (بدون تحكم اللاعب) — نفس المسار المنحني القديم
+      if (isPaused) {
+        pauseTimer -= dt;
+        if (pauseTimer <= 0) isPaused = false;
+      } else {
+        pathT += dt * 0.012;
+        if (pathT > 1) pathT -= 1;
+        if (Math.random() < 0.0022) { isPaused = true; pauseTimer = 0.7 + Math.random() * 0.9; }
+      }
+      const pos = pathCurve.getPointAt(((pathT % 1) + 1) % 1);
+      const tangent = pathCurve.getTangentAt(((pathT % 1) + 1) % 1);
+      character.position.set(pos.x, 0, pos.z);
+      character.rotation.y = Math.atan2(tangent.x, tangent.z);
+      moving = !isPaused;
+
+      if (rimLight) {
+        rimLight.position.set(character.position.x - tangent.z * 1.2, 1.6, character.position.z + tangent.x * 1.2);
+        rimLight.target.position.copy(character.position);
+        rimLight.target.updateMatrixWorld();
+      }
     }
 
-    const pos = pathCurve.getPointAt(((pathT % 1) + 1) % 1);
-    const tangent = pathCurve.getTangentAt(((pathT % 1) + 1) % 1);
-    character.position.set(pos.x, 0, pos.z);
-    const angle = Math.atan2(tangent.x, tangent.z);
-    character.rotation.y = angle;
-
-    const walking = !isPaused;
-    charMixerState.stepPhase += (walking ? dt * 7 : dt * 1.2);
-    charMixerState.bob = Math.abs(Math.sin(charMixerState.stepPhase)) * (walking ? 0.05 : 0.01);
-    const body = character.getObjectByName('body');
-    if (body) body.position.y = charMixerState.bob;
-
-    const legL = character.getObjectByName('legL');
-    const legR = character.getObjectByName('legR');
-    const armL = character.getObjectByName('armL');
-    const armR = character.getObjectByName('armR');
-    const swing = walking ? Math.sin(charMixerState.stepPhase) * 0.5 : 0;
-    if (legL) legL.rotation.x = swing;
-    if (legR) legR.rotation.x = -swing;
-    if (armL) armL.rotation.x = -swing * 0.7;
-    if (armR) armR.rotation.x = swing * 0.7;
-
-    if (rimLight) {
-      rimLight.position.set(character.position.x - tangent.z * 1.2, 1.6, character.position.z + tangent.x * 1.2);
-      rimLight.target.position.copy(character.position);
-      rimLight.target.updateMatrixWorld();
+    // أنيميشن حقيقي لو الموديل جاهز، وإلا bounce بسيط على الـ placeholder فقط
+    if (modelReady) {
+      setAnimState(moving ? (running ? 'run' : 'walk') : 'idle');
+    } else {
+      charMixerState.stepPhase += moving ? dt * 7 : dt * 1.2;
+      charMixerState.bob = Math.abs(Math.sin(charMixerState.stepPhase)) * (moving ? 0.05 : 0.01);
+      const ph = charModelGroup.getObjectByName('placeholder');
+      if (ph) ph.position.y = charMixerState.bob;
     }
 
     const refl = character.userData.reflection;
@@ -689,6 +980,11 @@ const World = (() => {
     if (currentScreen === 'stage5' && giftGroup) {
       targetPos = new THREE.Vector3(giftGroup.position.x + 1.4, 1.5, giftGroup.position.z + 2.6);
       lookAt = new THREE.Vector3(giftGroup.position.x, 0.6, giftGroup.position.z);
+    } else if (playerControlled && character) {
+      // كاميرا Third-Person حقيقية تتبع اتجاه الشخصية بنعومة
+      const back = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), character.rotation.y).multiplyScalar(4.4);
+      targetPos = character.position.clone().add(back).add(new THREE.Vector3(0, 2.5, 0));
+      lookAt = character.position.clone().add(new THREE.Vector3(0, 1.3, 0));
     } else if (currentScreen === 'intro') {
       targetPos = new THREE.Vector3(idleX, idleY, 10);
       lookAt = new THREE.Vector3(0, 1.6, -6);
@@ -737,12 +1033,27 @@ const World = (() => {
   --------------------------------------------------------------- */
   function setScreen(name) {
     currentScreen = name;
+    playerControlled = (name === 'intro');
+    lateralMode = (name === 'stage3');
+    setJoystickVisible(playerControlled);
+
     if (name === 'stage5') {
       buildGiftBox();
       if (giftGroup) giftGroup.visible = true;
     } else if (giftGroup) {
       giftGroup.visible = false;
     }
+
+    if (name === 'stage3' && character) {
+      // ابدئي مرحلة المطر من منتصف الطريق تقريبًا
+      lateralTargetX = 0.5;
+    }
+  }
+
+  // تُستدعى من game.js (مرحلة المطر) بدل رسم شخصية Emoji مسطحة على الكانفاس 2D
+  // value: رقم بين 0 و 1 يمثل موضع اللاعب الأفقي على الشاشة
+  function setLateralX(value) {
+    lateralTargetX = clamp(value, 0, 1);
   }
 
   function triggerGiftOpen(cb) {
@@ -764,8 +1075,10 @@ const World = (() => {
     init,
     resize,
     setScreen,
+    setLateralX,
     triggerGiftOpen,
     markGiftOpened,
     get isReady() { return ready; },
+    get isPlayerControlled() { return playerControlled; },
   };
 })();

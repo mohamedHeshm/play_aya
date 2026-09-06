@@ -21,6 +21,17 @@
   <!-- طبقة جزيئات 2D فوق العالم (قلوب/تألق/كونفيتي تفاعلية مع اللعب) -->
   <canvas id="particle-canvas" aria-hidden="true"></canvas>
 
+  <!-- ============================================================
+       جويستيك افتراضي للموبايل — يظهر فقط في وضع التحكم الحر
+       بالشخصية 3D (شاشة البداية). يختفي تلقائيًا في باقي الشاشات
+       حتى لا يتعارض مع تحكم المراحل الخاصة بكل Mini-game.
+  ============================================================ -->
+  <div id="joystick-zone" class="joystick-zone hidden" aria-hidden="true">
+    <div id="joystick-base" class="joystick-base">
+      <div id="joystick-stick" class="joystick-stick"></div>
+    </div>
+  </div>
+
   <!-- زر الموسيقى العام -->
   <button id="music-toggle" class="icon-btn" aria-label="تشغيل أو إيقاف الموسيقى">🔊</button>
 
@@ -169,6 +180,8 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- GLTFLoader بنفس إصدار three.js (r128) لتحميل موديل الشخصية 3D (GLB/GLTF) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/particles.js"></script>

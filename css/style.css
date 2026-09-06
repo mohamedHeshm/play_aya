@@ -189,6 +189,9 @@ body.no-webgl #scene3d-canvas { display: none; }
   font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
+  background: rgba(0,0,0,0.22);
+  padding: 4px 10px;
+  border-radius: 999px;
 }
 
 .hud-item--stage {
@@ -686,4 +689,47 @@ body.no-webgl .gift-hit-area.opened::before { content: '💌'; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* =====================================================================
+   جويستيك افتراضي (Virtual Joystick) — Mobile 3D Third-Person Controls
+   يظهر فقط في وضع التحكم الحر بالشخصية (شاشة البداية)
+   ===================================================================== */
+.joystick-zone {
+  position: fixed;
+  left: 18px;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: 128px;
+  height: 128px;
+  z-index: 40;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.joystick-base {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(20, 18, 34, 0.38);
+  border: 1px solid rgba(255, 247, 238, 0.22);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.joystick-stick {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--blush), var(--dusty-rose));
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  transition: transform 0.05s linear;
+  will-change: transform;
+}
+
+@media (min-width: 900px) {
+  /* على الكمبيوتر التحكم يكون بالكيبورد (WASD/Arrows)، فنخفي الجويستيك */
+  .joystick-zone { display: none; }
 }
