@@ -9,7 +9,7 @@
 
 const CONFIG = {
   // ✏️ ضعي اسم ملف الفيديو الموجود داخل assets/video/
-  videoFile: 'assets/video/birthday-video.mp4',
+  videoFile: 'assets/video/Video.mp4',
   introLine: 'في مكان بعيد… كان فيه ولد عنده أمنية واحدة…',
   girlName: '', // اختياري
 };
