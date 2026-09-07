@@ -8,13 +8,10 @@
 
 const World = (() => {
 
-  // ✏️ الشخصية 3D — ضعي ملف الموديل بتاعك هنا (GLB مُجهّز Rigged + Animations)
-  // الموديل الحالي placeholder مجاني (CC-BY) لحد ما تستبدليه بموديل نهائي مناسب للأجواء الرومانسية
+  // ✏️ الشخصية 3D — بنت procedural مبنية بالكامل من Three.js primitives
+  // (بدون أي موديل GLB/GLTF/FBX خارجي، وبدون Texture أو Sprite)
   const CHARACTER_CONFIG = {
-    url: 'assets/models/character.glb',
-    targetHeight: 1.7,        // ارتفاع الشخصية بوحدات العالم (متر تقريبًا)
-    modelYawOffset: Math.PI,  // ✏️ لو الشخصية بتمشي بظهرها، جربي 0 بدل Math.PI
-    turnSpeed: 6,             // سرعة استدارة الجسم نحو اتجاه المشي (كل ما زاد كل ما كانت الاستدارة أسرع وأنعم)
+    turnSpeed: 6, // سرعة استدارة الجسم نحو اتجاه المشي (كل ما زاد كل ما كانت الاستدارة أسرع وأنعم)
   };
 
   // ✏️ الشخصية ثابتة (Idle) في كل الشاشات ما عدا مرحلة المطر — هنا موضعها الثابت
@@ -53,6 +50,8 @@ const World = (() => {
   let character, charModelGroup, charMixerState;
   let mixer = null, actions = {}, currentAction = null, animState = 'idle';
   let modelReady = false;
+  // مراجع أجزاء الشخصية البنت الـ procedural (يُملأ في buildPlaceholderCharacter) لاستخدامها في المشي الحركي
+  let charParts = {};
   let giftBox, giftLid, giftGroup, giftPivot, giftHeartsPool = [];
 
   // ---------------- حالة حركة الشخصية ----------------
@@ -602,10 +601,10 @@ const World = (() => {
   }
 
   /* ---------------------------------------------------------------
-     الشخصية — 3D Character Model حقيقي (GLB/GLTF) Rigged + Animations
-     Idle / Walking / Running عبر AnimationMixer، مع placeholder مؤقت
-     (كبسولة بسيطة بدون Emoji) لحد ما يخلص تحميل الموديل، وكـ fallback
-     دائم لو تعذّر تحميل الملف بدون ما نكسر اللعبة
+     الشخصية — بنت 3D procedural كاملة، مبنية بالكامل من Three.js
+     primitives (بدون أي ملف/Texture/Sprite/Emoji خارجي). الحركة
+     (Idle / Walking) بتتحرك عبر تدوير أجزاء الجسم مباشرة (procedural
+     animation) في updateCharacter، مفيش AnimationMixer ولا موديل خارجي.
   --------------------------------------------------------------- */
   function buildCharacter() {
     character = new THREE.Group();
@@ -640,78 +639,158 @@ const World = (() => {
     scene.add(character);
     refreshReflection();
 
-    charMixerState = { bob: 0, stepPhase: 0 };
-
-    loadCharacterModel();
+    charMixerState = { bob: 0, stepPhase: 0, walkBlend: 0 };
   }
 
-  // Placeholder مؤقت: شكل هندسي بسيط (كبسولة + رأس) بدون أي Emoji إطلاقًا
+  // ---------------------------------------------------------------
+  // الشخصية: بنت 3D كاملة، مبنية بالكامل من Three.js primitives
+  // (بدون أي ملف/Texture/Sprite/Emoji خارجي) — هي الشخصية الأساسية
+  // الدائمة في اللعبة (مفيش موديل GLB خارجي بيتحمّل خالص).
+  // الـHierarchy: girlCharacter > head/hair/body(dress)/arms/legs
+  // ---------------------------------------------------------------
   function buildPlaceholderCharacter() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xb9857f, roughness: 0.6 });
-    const g = new THREE.Group();
-    g.name = 'placeholder';
-    const bodyGeo = (typeof THREE.CapsuleGeometry === 'function')
-      ? new THREE.CapsuleGeometry(0.26, 0.7, 4, 8)
-      : new THREE.CylinderGeometry(0.26, 0.26, 1.0, 10);
-    const body = new THREE.Mesh(bodyGeo, mat);
-    body.position.y = 0.85;
-    g.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), mat);
-    head.position.y = 1.55;
-    g.add(head);
-    charModelGroup.add(g);
-  }
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xe8b79a, roughness: 0.55 });
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x4a3324, roughness: 0.55 });
+    const dressMat = new THREE.MeshStandardMaterial({ color: 0xdba6c2, roughness: 0.55 });
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2e2a3a, roughness: 0.5 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x2a2020, roughness: 0.4 });
+    const mouthMat = new THREE.MeshStandardMaterial({ color: 0xa85f68, roughness: 0.5 });
 
-  function loadCharacterModel() {
-    if (typeof THREE.GLTFLoader === 'undefined') {
-      console.warn('GLTFLoader غير محمّل — الشخصية هتفضل بالشكل البديل البسيط.');
-      return;
-    }
-    const loader = new THREE.GLTFLoader();
-    loader.load(
-      CHARACTER_CONFIG.url,
-      (gltf) => onCharacterModelLoaded(gltf),
-      undefined,
-      (err) => {
-        console.warn('تعذّر تحميل موديل الشخصية 3D، هيستمر استخدام الشكل البديل:', err && err.message);
-      }
+    // اسم 'placeholder' يُبقى كما هو للتوافق مع أي كود آخر بيدور على الاسم ده
+    const girlCharacter = new THREE.Group();
+    girlCharacter.name = 'placeholder';
+    charModelGroup.add(girlCharacter);
+    charParts.root = girlCharacter;
+
+    // ---------- الرقبة ----------
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 8), skinMat);
+    neck.position.y = 1.28;
+    girlCharacter.add(neck);
+
+    // ---------- الرأس + الوجه ----------
+    const head = new THREE.Group();
+    head.name = 'head';
+    head.position.y = 1.42;
+    girlCharacter.add(head);
+
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 14), skinMat);
+    headMesh.scale.set(0.88, 1.05, 0.92);
+    head.add(headMesh);
+
+    const eyeGeo = new THREE.SphereGeometry(0.013, 8, 8);
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(-0.05, 0.0, 0.135);
+    const eyeR = eyeL.clone(); eyeR.position.x = 0.05;
+    head.add(eyeL, eyeR);
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.007, 0.008), mouthMat);
+    mouth.position.set(0, -0.065, 0.14);
+    head.add(mouth);
+
+    // ---------- الشعر (أهم جزء — واضح جدًا من الخلف) ----------
+    const hair = new THREE.Group();
+    hair.name = 'hair';
+    head.add(hair);
+    // قبعة الشعر أعلى الرأس
+    const hairCap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.163, 16, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
+      hairMat
     );
-  }
+    hairCap.position.y = 0.015;
+    hair.add(hairCap);
+    // الشعر الطويل من الخلف — يصل لأعلى الظهر
+    const hairBack = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.34, 4, 8), hairMat);
+    hairBack.position.set(0, -0.24, -0.095);
+    hairBack.scale.set(0.95, 1, 0.55);
+    hair.add(hairBack);
+    // خصلتان جانبيتان حول الرأس
+    const lockGeo = new THREE.CapsuleGeometry(0.032, 0.24, 4, 6);
+    const lockL = new THREE.Mesh(lockGeo, hairMat);
+    lockL.position.set(-0.135, -0.05, 0.01);
+    lockL.rotation.z = 0.14;
+    const lockR = lockL.clone();
+    lockR.position.x = 0.135;
+    lockR.rotation.z = -0.14;
+    hair.add(lockL, lockR);
+    charParts.hair = hair;
 
-  function onCharacterModelLoaded(gltf) {
-    const model = gltf.scene;
-    model.traverse((o) => { if (o.isMesh) { o.frustumCulled = true; } });
+    // ---------- الجسم / الفستان ----------
+    const bodyGroup = new THREE.Group();
+    bodyGroup.name = 'body';
+    girlCharacter.add(bodyGroup);
 
-    // تحجيم الموديل ليطابق الطول المطلوب + إلصاق القدمين بالأرض
-    const box = new THREE.Box3().setFromObject(model);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const scale = CHARACTER_CONFIG.targetHeight / (size.y || 1);
-    model.scale.setScalar(scale);
-    const box2 = new THREE.Box3().setFromObject(model);
-    model.position.y -= box2.min.y;
-    model.rotation.y = CHARACTER_CONFIG.modelYawOffset;
+    const dress = new THREE.Group();
+    dress.name = 'dress';
+    bodyGroup.add(dress);
+    // أعلى الفستان (الكتفين ضيقين، خصر واضح قليلًا)
+    const bodice = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.075, 0.22, 10), dressMat);
+    bodice.position.y = 1.12;
+    dress.add(bodice);
+    // تنورة الفستان — انسيابية وتتسع للأسفل
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.2, 0.42, 12, 1, true), dressMat);
+    skirt.position.y = 0.8;
+    dress.add(skirt);
+    const skirtHem = new THREE.Mesh(new THREE.CircleGeometry(0.2, 12), dressMat);
+    skirtHem.rotation.x = -Math.PI / 2;
+    skirtHem.position.y = 0.59;
+    dress.add(skirtHem);
 
-    // إزالة الـ placeholder واستبداله بالموديل الحقيقي
-    const placeholder = charModelGroup.getObjectByName('placeholder');
-    if (placeholder) charModelGroup.remove(placeholder);
-    charModelGroup.add(model);
-    modelReady = true;
+    // ---------- الذراعان (منفصلتان تمامًا عن الجسم) ----------
+    function buildArm(sign) {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(sign * 0.125, 1.2, 0);
+      const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.19, 4, 8), skinMat);
+      upperArm.position.y = -0.1;
+      shoulder.add(upperArm);
 
-    // ربط الأنيميشن
-    mixer = new THREE.AnimationMixer(model);
-    actions = {};
-    (gltf.animations || []).forEach((clip) => {
-      const key = clip.name.toLowerCase();
-      if (key.includes('idle') || key.includes('standing')) actions.idle = actions.idle || mixer.clipAction(clip);
-      else if (key.includes('run')) actions.run = actions.run || mixer.clipAction(clip);
-      else if (key.includes('walk')) actions.walk = actions.walk || mixer.clipAction(clip);
+      const elbow = new THREE.Group();
+      elbow.position.y = -0.2;
+      shoulder.add(elbow);
+      const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.021, 0.17, 4, 8), skinMat);
+      forearm.position.y = -0.09;
+      elbow.add(forearm);
+
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), skinMat);
+      hand.position.y = -0.19;
+      elbow.add(hand);
+
+      bodyGroup.add(shoulder);
+      return { shoulder, elbow };
+    }
+    const leftArm = buildArm(-1);
+    const rightArm = buildArm(1);
+    charParts.leftUpperArm = leftArm.shoulder;
+    charParts.rightUpperArm = rightArm.shoulder;
+
+    // ---------- الرجلان (منفصلتان، تظهران أسفل الفستان) ----------
+    function buildLeg(sign) {
+      const hip = new THREE.Group();
+      hip.position.set(sign * 0.055, 0.58, 0);
+      const upperLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.036, 0.22, 4, 8), skinMat);
+      upperLeg.position.y = -0.12;
+      hip.add(upperLeg);
+
+      const knee = new THREE.Group();
+      knee.position.y = -0.24;
+      hip.add(knee);
+      const lowerLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.2, 4, 8), skinMat);
+      lowerLeg.position.y = -0.11;
+      knee.add(lowerLeg);
+
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.09), shoeMat);
+      foot.position.set(0, -0.225, 0.02);
+      knee.add(foot);
+
+      girlCharacter.add(hip);
+      return { hip, knee };
+    }
+    const leftLeg = buildLeg(-1);
+    const rightLeg = buildLeg(1);
+    charParts.leftUpperLeg = leftLeg.hip;
+    charParts.rightUpperLeg = rightLeg.hip;
+
+    // Smooth shading على كل الأسطح
+    girlCharacter.traverse((o) => {
+      if (o.isMesh) o.castShadow = false;
     });
-    animState = 'idle';
-    currentAction = actions.idle || actions.walk || null;
-    if (currentAction) currentAction.play();
-
-    refreshReflection();
   }
 
   // انعكاس خفيف على الأرض المبللة — يُعاد بناؤه كل مرة يتغير فيها شكل الشخصية (placeholder <-> model)
@@ -838,14 +917,30 @@ const World = (() => {
       moving = false;
     }
 
-    // أنيميشن حقيقي لو الموديل جاهز، وإلا bounce بسيط على الـ placeholder فقط
-    if (modelReady) {
-      setAnimState(moving ? 'walk' : 'idle');
-    } else {
-      charMixerState.stepPhase += moving ? dt * 7 : dt * 1.2;
-      charMixerState.bob = Math.abs(Math.sin(charMixerState.stepPhase)) * (moving ? 0.05 : 0.01);
-      const ph = charModelGroup.getObjectByName('placeholder');
-      if (ph) ph.position.y = charMixerState.bob;
+    // Walk Animation procedural بالكامل — بدون أي ملف أنيميشن خارجي.
+    // walkBlend يتحول بنعومة بين 0 (واقفة) و1 (بتمشي) باستخدام delta time
+    // حتى لا تكون الحركة مفاجئة/robotic ولا تختلف سرعتها حسب الـFPS.
+    const targetBlend = moving ? 1 : 0;
+    charMixerState.walkBlend += (targetBlend - charMixerState.walkBlend) * Math.min(1, dt * 4.5);
+    const blend = charMixerState.walkBlend;
+    charMixerState.stepPhase += dt * (0.9 + blend * 6.2);
+    const phase = charMixerState.stepPhase;
+    const swing = Math.sin(phase) * 0.5 * blend;
+
+    if (charParts.leftUpperLeg) charParts.leftUpperLeg.rotation.x = swing;
+    if (charParts.rightUpperLeg) charParts.rightUpperLeg.rotation.x = -swing;
+    // الذراعان يتحركان عكس حركة الرجلين
+    if (charParts.leftUpperArm) charParts.leftUpperArm.rotation.x = -swing * 0.85;
+    if (charParts.rightUpperArm) charParts.rightUpperArm.rotation.x = swing * 0.85;
+
+    // حركة بسيطة جدًا للجسم لأعلى وأسفل
+    charMixerState.bob = Math.abs(Math.sin(phase)) * (0.008 + blend * 0.032);
+    if (charParts.root) charParts.root.position.y = charMixerState.bob;
+
+    // حركة بسيطة جدًا للشعر مع المشي/المطر (يتأخر قليلًا عن الجسم لإحساس طبيعي)
+    if (charParts.hair) {
+      charParts.hair.rotation.z = Math.sin(phase * 0.85) * (0.015 + blend * 0.055);
+      charParts.hair.rotation.x = Math.sin(phase * 0.85 + 0.6) * (0.01 + blend * 0.03);
     }
 
     if (rimLight) {
