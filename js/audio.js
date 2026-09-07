@@ -13,10 +13,10 @@ const AudioManager = (() => {
     click:        'assets/audio/button-click.mp3',
     stageComplete: 'assets/audio/stage-complete.mp3',
     achievement:  'assets/audio/achievement-unlock.mp3',
-    giftOpen:     'assets/audio/gift-open.mp3',
+    giftOpen:     'assets/audio/2.mpeg',
     celebration:  'assets/audio/final-celebration.mp3',
     footstep:     'assets/audio/footstep.mp3',
-    rainAmbient:  'assets/audio/1.mp3',
+    rainAmbient:  'assets/audio/2.mp3',
   };
 
   let ambientEl = null;
