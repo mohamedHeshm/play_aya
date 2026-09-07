@@ -8,7 +8,7 @@
 const AudioManager = (() => {
 
   const FILES = {
-    music:        'assets/audio/background-music.mp3',
+    music:        'assets/audio/1.mpeg',
     heart:        'assets/audio/heart-collect.mp3',
     click:        'assets/audio/button-click.mp3',
     stageComplete: 'assets/audio/stage-complete.mp3',
