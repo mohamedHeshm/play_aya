@@ -696,13 +696,13 @@ const World = (() => {
     );
     hairCap.position.y = 0.015;
     hair.add(hairCap);
-    // الشعر الطويل من الخلف — يصل لأعلى الظهر
-    const hairBack = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.34, 4, 8), hairMat);
+    // الشعر الطويل من الخلف — يصل لأعلى الظهر (Cylinder بدل CapsuleGeometry)
+    const hairBack = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.34, 8), hairMat);
     hairBack.position.set(0, -0.24, -0.095);
     hairBack.scale.set(0.95, 1, 0.55);
     hair.add(hairBack);
-    // خصلتان جانبيتان حول الرأس
-    const lockGeo = new THREE.CapsuleGeometry(0.032, 0.24, 4, 6);
+    // خصلتان جانبيتان حول الرأس (Cylinder بدل CapsuleGeometry)
+    const lockGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.24, 6);
     const lockL = new THREE.Mesh(lockGeo, hairMat);
     lockL.position.set(-0.135, -0.05, 0.01);
     lockL.rotation.z = 0.14;
@@ -737,14 +737,16 @@ const World = (() => {
     function buildArm(sign) {
       const shoulder = new THREE.Group();
       shoulder.position.set(sign * 0.125, 1.2, 0);
-      const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.19, 4, 8), skinMat);
+      // العضد (Cylinder بدل CapsuleGeometry)
+      const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.19, 8), skinMat);
       upperArm.position.y = -0.1;
       shoulder.add(upperArm);
 
       const elbow = new THREE.Group();
       elbow.position.y = -0.2;
       shoulder.add(elbow);
-      const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.021, 0.17, 4, 8), skinMat);
+      // الساعد (Cylinder بدل CapsuleGeometry)
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.17, 8), skinMat);
       forearm.position.y = -0.09;
       elbow.add(forearm);
 
@@ -764,14 +766,16 @@ const World = (() => {
     function buildLeg(sign) {
       const hip = new THREE.Group();
       hip.position.set(sign * 0.055, 0.58, 0);
-      const upperLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.036, 0.22, 4, 8), skinMat);
+      // أعلى الفخذ (Cylinder بدل CapsuleGeometry)
+      const upperLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.22, 8), skinMat);
       upperLeg.position.y = -0.12;
       hip.add(upperLeg);
 
       const knee = new THREE.Group();
       knee.position.y = -0.24;
       hip.add(knee);
-      const lowerLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.2, 4, 8), skinMat);
+      // أسفل الساق (Cylinder بدل CapsuleGeometry)
+      const lowerLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.2, 8), skinMat);
       lowerLeg.position.y = -0.11;
       knee.add(lowerLeg);
 
@@ -919,7 +923,7 @@ const World = (() => {
 
     // Walk Animation procedural بالكامل — بدون أي ملف أنيميشن خارجي.
     // walkBlend يتحول بنعومة بين 0 (واقفة) و1 (بتمشي) باستخدام delta time
-    // حتى لا تكون الحركة مفاجئة/robotic ولا تختلف سرعتها حسب الـFPS.
+    // حتى لا تكون الحركة مفاجئة/robotic ولا تختلف سرعتها عن الـFPS.
     const targetBlend = moving ? 1 : 0;
     charMixerState.walkBlend += (targetBlend - charMixerState.walkBlend) * Math.min(1, dt * 4.5);
     const blend = charMixerState.walkBlend;
