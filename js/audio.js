@@ -8,7 +8,7 @@
 const AudioManager = (() => {
 
   const FILES = {
-    music:        'assets/audio/1.mpeg',
+    music:        'assets/audio/1.mp3',
     heart:        'assets/audio/heart-collect.mp3',
     click:        'assets/audio/button-click.mp3',
     stageComplete: 'assets/audio/stage-complete.mp3',
@@ -16,7 +16,7 @@ const AudioManager = (() => {
     giftOpen:     'assets/audio/gift-open.mp3',
     celebration:  'assets/audio/final-celebration.mp3',
     footstep:     'assets/audio/footstep.mp3',
-    rainAmbient:  'assets/audio/rain-ambient.mp3',
+    rainAmbient:  'assets/audio/1.mp3',
   };
 
   let ambientEl = null;
