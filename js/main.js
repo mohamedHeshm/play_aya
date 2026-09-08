@@ -152,6 +152,10 @@ const CONFIG = {
     screens[name].classList.add('active');
     currentScreen = name;
 
+    // المرحلة ٢: نسمح للمس بالمرور عبر #app للوصول لعناصر حديقة
+    // الذكريات المرسومة داخل الكانفس ثلاثي الأبعاد أسفلها (راجعي التعليق في style.css)
+    document.body.classList.toggle('stage2-active', name === 'stage2');
+
     if (STAGE_ORDER.includes(name)) {
       hud.classList.remove('hidden');
       setStageLabel(name);
