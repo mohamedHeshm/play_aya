@@ -394,17 +394,25 @@ body.no-webgl #scene3d-canvas { display: none; }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* إصلاح: شاشة المرحلة ٢ (#screen-stage2) شفافة بصريًا وتغطي الشاشة كلها
-   فوق العالم ثلاثي الأبعاد (#scene3d-canvas) الذي تُرسم عليه عناصر
-   حديقة الذكريات (كرسي/فانوس/شجرة...). بدون هذا الإصلاح، أي لمسة/نقرة
-   كانت "تُمتصّ" بواسطة الشاشة نفسها ولا تصل أبدًا إلى الكانفس، فتبدو
-   العناصر معروضة لكن لا يحدث شيء عند لمسها ولا تظهر نافذة الذكرى.
-   الحل: نجعل الشاشة تُمرّر اللمس لما تحتها، ونُفعّل اللمس فقط على
-   العناصر التي تحتاجه فعليًا داخلها. */
-#screen-stage2 { pointer-events: none; }
-#screen-stage2 .stage-header,
-#screen-stage2 .memory-garden,
-#screen-stage2 #stage2-continue { pointer-events: auto; }
+/* إصلاح: عناصر حديقة الذكريات (كرسي/فانوس/شجرة...) تُرسم داخل الكانفس
+   ثلاثي الأبعاد (#scene3d-canvas) الذي يقع خلف كل شيء (z-index: 0).
+   لكن #app -- وهو الحاوية اللي بتلف كل الشاشات -- شفاف بصريًا لكنه
+   لسه بيغطي الشاشة كلها بـ z-index أعلى، فأي لمسة/نقرة كانت "تُمتصّ"
+   بواسطته هو نفسه (مش بس عنصر الشاشة الداخلي)، ومبتوصلش أبدًا للكانفس
+   تحته. النتيجة: العناصر بتظهر لكن مفيش حاجة بتحصل لما تتلمس.
+   main.js بيضيف كلاس body.stage2-active وقت ما المرحلة ٢ نشطة، وهنا
+   بنعطّل pointer-events على #app بالكامل في هذه الحالة، ونعيد تفعيلها
+   فقط على العناصر اللي محتاجة تستقبل اللمس (رأس المرحلة، الشبكة
+   الاحتياطية بدون WebGL، زر التالي، وأي نافذة منبثقة زي نافذة الذكرى). */
+body.stage2-active #app {
+  pointer-events: none;
+}
+body.stage2-active #app .stage-header,
+body.stage2-active #app .memory-garden,
+body.stage2-active #app #stage2-continue,
+body.stage2-active #app .modal:not(.hidden) {
+  pointer-events: auto;
+}
 
 #stage2-continue {
   position: absolute;
