@@ -55,8 +55,8 @@ const World = (() => {
   let giftBox, giftLid, giftGroup, giftPivot, giftHeartsPool = [];
 
   // ---------------- حالة حركة الشخصية ----------------
-  // 'idle'     -> واقفة ثابتة (كل الشاشات ما عدا المطر)
-  // 'walking'  -> بتمشي تلقائيًا في مرحلة المطر تجاه النجوم
+  // 'idle'     -> واقفة ثابتة / غير ظاهرة (كل الشاشات ما عدا المطر)
+  // 'playing'  -> اللاعب يتحكم بها فعليًا (كيبورد/جويستيك) في مرحلة المطر
   // 'arriving' -> وصلت، وقفة سينمائية قصيرة قبل الانتقال
   // 'arrived'  -> واقفة عند النجوم (Idle) بعد انتهاء الوقفة
   let characterMode = 'idle';
@@ -68,6 +68,27 @@ const World = (() => {
   // مجموعة النجوم الهدف في نهاية طريق المطر (منفصلة عن حقل نجوم السماء الخلفي)
   let goalStarsGroup = null, goalStarsLight = null;
   let arrivedGlowActive = false, arrivedGlowTimer = 0;
+
+  // ---------------- مجموعات بيئة كل مرحلة (كل مرحلة شكلها/Gameplay مختلف) ----------------
+  // roadGroup: طريق المطر الكامل (أرض + أشجار + أعمدة + مباني + مطر + انعكاس) — المرحلة ٣ فقط
+  let roadGroup = null;
+  // heartsGroup: حديقة رومانسية دافئة صغيرة لجمع القلوب — المرحلة ١ فقط
+  let heartsGroup = null;
+  let heartsPool = [], heartsCollectorMesh = null;
+  const HEARTS_PLANE_DISTANCE = 6.2; // بُعد مستوى القلوب الافتراضي أمام الكاميرا
+  // memoryGroup: حديقة الذكريات — عناصر 3D تفاعلية — المرحلة ٢ فقط
+  let memoryGroup = null;
+  let memoryItems = []; // { id, mesh, glow, discovered }
+  let memoryCallbacks = {};
+  // giftEnvGroup: بيئة دافئة صغيرة حول صندوق الهدية — المرحلة ٥ فقط
+  let giftEnvGroup = null;
+
+  // ---------------- حركة المرحلة ٣: تحكم حقيقي من اللاعب (بدون مشي تلقائي) ----------------
+  const STAGE3_BOUNDS = { xMin: -2.5, xMax: 2.5, zStart: 5.5, zEnd: -21 };
+  const STAGE3_GOAL = new THREE.Vector3(-0.3, 0, -21);
+  const STAGE3_SPEED = 3.1; // وحدات عالم/ثانية
+  const STAGE3_ARRIVE_DIST = 1.4;
+  let stage3Input = { x: 0, z: 0 };
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -131,6 +152,11 @@ const World = (() => {
     buildStars();
     buildMoon();
     buildClouds();
+
+    roadGroup = new THREE.Group();
+    roadGroup.name = 'roadGroup';
+    scene.add(roadGroup);
+
     buildGround();
     buildEnvironmentProps();
     buildRain();
@@ -138,6 +164,10 @@ const World = (() => {
     buildGoalStars();
     buildCharacter();
     buildLights();
+
+    buildHeartsEnv();
+    buildMemoryEnv();
+    buildGiftEnv();
 
     window.addEventListener('resize', resize);
     canvas.addEventListener('pointerdown', onPointerDown, { passive: true });
@@ -171,7 +201,7 @@ const World = (() => {
       leaves2.position.y = 2.7;
       g.add(leaves2);
       g.position.set(x, 0, z);
-      scene.add(g);
+      roadGroup.add(g);
       envProps.push(g);
     }
 
@@ -201,7 +231,7 @@ const World = (() => {
       halo.position.copy(glow.position);
       g.add(halo);
       g.position.set(x, 0, z);
-      scene.add(g);
+      roadGroup.add(g);
       envProps.push(g);
     }
 
@@ -219,7 +249,7 @@ const World = (() => {
         g.add(win);
       }
       g.position.set(x, 0, z);
-      scene.add(g);
+      roadGroup.add(g);
       envProps.push(g);
     }
 
@@ -431,13 +461,13 @@ const World = (() => {
     ground = new THREE.Mesh(geo, mat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(0, 0, -30);
-    scene.add(ground);
+    roadGroup.add(ground);
 
     // انعكاس وهمي رخيص: نسخة مقلوبة شفافة من مجموعة العالم الأمامي
     reflectionGroup = new THREE.Group();
     reflectionGroup.scale.set(1, -1, 1);
     reflectionGroup.position.y = -0.02;
-    scene.add(reflectionGroup);
+    roadGroup.add(reflectionGroup);
   }
 
   /* ---------------------------------------------------------------
@@ -462,7 +492,7 @@ const World = (() => {
         drift: (Math.random() - 0.5) * 0.6,
       });
     }
-    scene.add(rainMesh);
+    roadGroup.add(rainMesh);
 
     // بِرك splash — دوائر شفافة صغيرة تنبض عشوائيًا فوق الأرض
     const splashCount = lowPower ? 8 : 16;
@@ -474,14 +504,15 @@ const World = (() => {
       mesh.position.set((Math.random() - 0.5) * 8, 0.02, -2 - Math.random() * 18);
       mesh.userData.phase = Math.random() * 2;
       mesh.userData.speed = 0.6 + Math.random() * 0.5;
-      scene.add(mesh);
+      roadGroup.add(mesh);
       splashPool.push(mesh);
     }
   }
 
   function updateRain(dt) {
     if (!rainMesh) return;
-    const visible = currentScreen !== 'intro';
+    // المطر أثناء المرحلة ٣ فقط (بيئة "ليلة المطر") — بقية المراحل بيئتها مختلفة تمامًا
+    const visible = currentScreen === 'stage3';
     rainMesh.visible = visible;
     if (!visible) return;
     for (let i = 0; i < rainData.length; i++) {
@@ -557,7 +588,7 @@ const World = (() => {
     goalStarsLight = new THREE.PointLight(0xfff3d6, 0.3, 10, 2);
     goalStarsGroup.add(goalStarsLight);
 
-    scene.add(goalStarsGroup);
+    roadGroup.add(goalStarsGroup);
   }
 
   function updateGoalStars(dt) {
@@ -600,6 +631,362 @@ const World = (() => {
     return { x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (1 - (v.y * 0.5 + 0.5)) * window.innerHeight };
   }
 
+  // نقطة على بُعد ثابت من الكاميرا في اتجاه بكسل شاشة معيّن — تُستخدم لتحويل
+  // إحداثيات اللمس/الماوس ثنائية البعد (من كانفس المرحلة) إلى موضع 3D حقيقي
+  function screenToWorldPoint(px, py, width, height, distance) {
+    const ndcX = (px / width) * 2 - 1;
+    const ndcY = -(py / height) * 2 + 1;
+    raycaster.setFromCamera({ x: ndcX, y: ndcY }, camera);
+    return raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().normalize().multiplyScalar(distance));
+  }
+
+  function makeHeartShape(size) {
+    const s = new THREE.Shape();
+    s.moveTo(0, size * 0.32);
+    s.bezierCurveTo(0, size * 0.5, -size * 0.5, size * 0.62, -size * 0.5, size * 0.28);
+    s.bezierCurveTo(-size * 0.5, -size * 0.05, -size * 0.18, -size * 0.32, 0, -size * 0.55);
+    s.bezierCurveTo(size * 0.18, -size * 0.32, size * 0.5, -size * 0.05, size * 0.5, size * 0.28);
+    s.bezierCurveTo(size * 0.5, size * 0.62, 0, size * 0.5, 0, size * 0.32);
+    return s;
+  }
+
+  function simpleGlowSprite(color, scale) {
+    const tex = createGlowTexture(color, 'rgba(0,0,0,0)');
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));
+    spr.scale.set(scale, scale, 1);
+    return spr;
+  }
+
+  /* =================================================================
+     المرحلة ١ — حديقة رومانسية صغيرة لجمع القلوب (لا تظهر البنت هنا)
+     القلوب مجسّمات 3D حقيقية (Extrude) وليست Emoji، تتبع لمس/سحب اللاعب
+     الذي يتحكم بها game.js فيزيائيًا؛ هذا الملف فقط يعرضها كأجسام 3D.
+  ================================================================= */
+  function buildHeartsEnv() {
+    heartsGroup = new THREE.Group();
+    heartsGroup.name = 'heartsGroup';
+    heartsGroup.visible = false;
+    heartsGroup.position.set(0, 0, 2.5);
+
+    // أرضية دائرية دافئة (وردي/بنفسجي) مختلفة تمامًا عن طريق المطر
+    const discCanvas = document.createElement('canvas');
+    discCanvas.width = discCanvas.height = 256;
+    const dctx = discCanvas.getContext('2d');
+    const rg = dctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    rg.addColorStop(0, '#3a2140');
+    rg.addColorStop(0.6, '#241a3a');
+    rg.addColorStop(1, '#140f26');
+    dctx.fillStyle = rg;
+    dctx.fillRect(0, 0, 256, 256);
+    const discTex = new THREE.CanvasTexture(discCanvas);
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(9, 28),
+      new THREE.MeshStandardMaterial({ map: discTex, roughness: 0.55, metalness: 0.1 })
+    );
+    disc.rotation.x = -Math.PI / 2;
+    heartsGroup.add(disc);
+
+    // أشجار وأضواء ناعمة صغيرة حول الحديقة
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.9 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x5a2f4a, roughness: 0.7, emissive: 0x2a1030, emissiveIntensity: 0.25 });
+    const lampGlowMat = new THREE.MeshBasicMaterial({ color: 0xffd7ea, fog: false });
+    const ringCount = lowPower ? 5 : 8;
+    for (let i = 0; i < ringCount; i++) {
+      const a = (i / ringCount) * Math.PI * 2;
+      const r = 6.5 + Math.random() * 1.5;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (i % 2 === 0) {
+        const g = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.1, 6), trunkMat);
+        trunk.position.y = 0.55;
+        g.add(trunk);
+        const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 7), leafMat);
+        leaves.position.y = 1.35;
+        g.add(leaves);
+        g.position.set(x, 0, z);
+        heartsGroup.add(g);
+      } else {
+        const g = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.6, 6), trunkMat);
+        pole.position.y = 0.8;
+        g.add(pole);
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), lampGlowMat);
+        glow.position.y = 1.62;
+        g.add(glow);
+        const halo = simpleGlowSprite('rgba(255,215,234,0.55)', 1.2);
+        halo.position.y = 1.62;
+        g.add(halo);
+        g.position.set(x, 0, z);
+        heartsGroup.add(g);
+      }
+    }
+
+    const softLight = new THREE.PointLight(0xe9b9c4, 0.6, 16, 2);
+    softLight.position.set(0, 3, 1);
+    heartsGroup.add(softLight);
+
+    scene.add(heartsGroup);
+
+    // مجمع القلوب: مجسّمات Extrude حقيقية (ليست Emoji) — يُعاد استخدامها كل Frame
+    const heartShape = makeHeartShape(1);
+    const heartGeo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 });
+    heartGeo.center();
+    const normalMat = new THREE.MeshStandardMaterial({ color: 0xdba6c2, roughness: 0.35, metalness: 0.2, emissive: 0x6a2f45, emissiveIntensity: 0.35 });
+    const specialMat = new THREE.MeshStandardMaterial({ color: 0xffd9e6, roughness: 0.25, metalness: 0.3, emissive: 0xff9dc0, emissiveIntensity: 0.6 });
+    const POOL_SIZE = 16;
+    heartsPool = [];
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const mesh = new THREE.Mesh(heartGeo, normalMat.clone());
+      mesh.visible = false;
+      mesh.userData.baseScale = 1;
+      heartsGroup.add(mesh);
+      heartsPool.push({ mesh, special: false, normalMat, specialMat });
+    }
+
+    // مؤشر/مجمّع اللاعب — كرة متوهجة بسيطة (بدون شخصية) تمثل موضع اللمس
+    const collectorGeo = new THREE.SphereGeometry(0.18, 14, 12);
+    const collectorMat = new THREE.MeshStandardMaterial({ color: 0xfff7ee, roughness: 0.3, emissive: 0xe9b9c4, emissiveIntensity: 0.7 });
+    heartsCollectorMesh = new THREE.Mesh(collectorGeo, collectorMat);
+    heartsCollectorMesh.visible = false;
+    heartsGroup.add(heartsCollectorMesh);
+    const collectorGlow = simpleGlowSprite('rgba(255,247,238,0.8)', 0.9);
+    heartsCollectorMesh.add(collectorGlow);
+  }
+
+  // تُستدعى من game.js كل Frame أثناء المرحلة ١ لعرض القلوب/اللاعب كأجسام 3D حقيقية
+  // hearts: [{x,y (إحداثيات كانفس المرحلة), radius, special}], player: {x,y,r}
+  function stage1Render(hearts, player, width, height) {
+    if (!ready || !heartsGroup) return;
+    for (let i = 0; i < heartsPool.length; i++) {
+      const slot = heartsPool[i];
+      const h = hearts[i];
+      if (!h) { slot.mesh.visible = false; continue; }
+      const p = screenToWorldPoint(h.x, h.y, width, height, HEARTS_PLANE_DISTANCE);
+      slot.mesh.position.copy(p);
+      slot.mesh.visible = true;
+      const scale = (h.radius || 20) / 22;
+      slot.mesh.scale.set(scale, scale, scale);
+      slot.mesh.rotation.y += 0.02;
+      if (h.special !== slot.special) {
+        slot.mesh.material = h.special ? slot.specialMat : slot.normalMat;
+        slot.special = h.special;
+      }
+    }
+    if (player && heartsCollectorMesh) {
+      const cp = screenToWorldPoint(player.x, player.y, width, height, HEARTS_PLANE_DISTANCE - 0.4);
+      heartsCollectorMesh.position.copy(cp);
+      heartsCollectorMesh.visible = true;
+    }
+  }
+
+  function stage1Stop() {
+    if (!heartsPool.length) return;
+    heartsPool.forEach(s => { s.mesh.visible = false; });
+    if (heartsCollectorMesh) heartsCollectorMesh.visible = false;
+  }
+
+  /* =================================================================
+     المرحلة ٢ — حديقة الذكريات: عناصر 3D تفاعلية مختلفة تمامًا عن
+     المرحلة ١ (لا تظهر البنت هنا أيضًا)
+  ================================================================= */
+  function makeStage2Prop(type) {
+    const g = new THREE.Group();
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x4a3324, roughness: 0.75 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.4, metalness: 0.5 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0xffe3b0, emissive: 0xffcf8a, emissiveIntensity: 0.15, transparent: true, opacity: 0.85, roughness: 0.2 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f5240, roughness: 0.8 });
+    const boxMat = new THREE.MeshStandardMaterial({ color: 0x6a3b4a, roughness: 0.5, metalness: 0.15 });
+    const starMat = new THREE.MeshStandardMaterial({ color: 0xf3e6d2, emissive: 0xf3e6d2, emissiveIntensity: 0.25, roughness: 0.35 });
+    let glowRef;
+
+    if (type === 'chair') {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.5), woodMat);
+      seat.position.y = 0.5; g.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.06), woodMat);
+      back.position.set(0, 0.78, -0.22); g.add(back);
+      [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]].forEach(([x, z]) => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 6), woodMat);
+        leg.position.set(x, 0.25, z); g.add(leg);
+      });
+      glowRef = seat;
+    } else if (type === 'lantern') {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.0, 6), metalMat);
+      pole.position.y = 0.5; g.add(pole);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.26, 8), glassMat);
+      body.position.y = 1.05; g.add(body);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.14, 8), metalMat);
+      cap.position.y = 1.24; g.add(cap);
+      glowRef = body;
+    } else if (type === 'tree') {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 1.0, 6), woodMat);
+      trunk.position.y = 0.5; g.add(trunk);
+      const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.5, 9, 8), leafMat);
+      leaves.position.y = 1.25; g.add(leaves);
+      glowRef = leaves;
+    } else if (type === 'box') {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.32), boxMat);
+      body.position.y = 0.2; g.add(body);
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.36), boxMat);
+      lid.position.y = 0.4; g.add(lid);
+      glowRef = body;
+    } else { // starlamp
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.2, 6), metalMat);
+      pole.position.y = 0.6; g.add(pole);
+      const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), starMat);
+      star.position.y = 1.28; g.add(star);
+      glowRef = star;
+    }
+
+    // نطاق لمس أكبر شفاف لسهولة الضغط على الموبايل
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.position.y = 0.55;
+    g.add(hit);
+
+    return { group: g, glowMesh: glowRef, hitMesh: hit };
+  }
+
+  function buildMemoryEnv() {
+    memoryGroup = new THREE.Group();
+    memoryGroup.name = 'memoryGroup';
+    memoryGroup.visible = false;
+    memoryGroup.position.set(0, 0, 1.5);
+
+    const discCanvas = document.createElement('canvas');
+    discCanvas.width = discCanvas.height = 256;
+    const dctx = discCanvas.getContext('2d');
+    const rg = dctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    rg.addColorStop(0, '#1c2436');
+    rg.addColorStop(0.6, '#141b2c');
+    rg.addColorStop(1, '#0c111e');
+    dctx.fillStyle = rg;
+    dctx.fillRect(0, 0, 256, 256);
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(6.5, 28),
+      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(discCanvas), roughness: 0.6 })
+    );
+    disc.rotation.x = -Math.PI / 2;
+    memoryGroup.add(disc);
+
+    const ambient = new THREE.PointLight(0x9fb2ff, 0.5, 14, 2);
+    ambient.position.set(0, 3, 2);
+    memoryGroup.add(ambient);
+
+    const TYPES = ['chair', 'lantern', 'tree', 'box', 'starlamp'];
+    const SLOTS = 9;
+    const COLS = 3;
+    memoryItems = [];
+    for (let i = 0; i < SLOTS; i++) {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      // شبكة تعتمد على العمق (z) وليس الاتساع الأفقي (x) كي تبقى كل العناصر
+      // داخل مجال رؤية الكاميرا على الموبايل بغض النظر عن نسبة الشاشة
+      const x = (col - 1) * 1.35 + (Math.random() - 0.5) * 0.15;
+      const z = -row * 1.6 + (Math.random() - 0.5) * 0.15;
+      const prop = makeStage2Prop(TYPES[i % TYPES.length]);
+      prop.group.position.set(x, 0, z);
+      prop.hitMesh.userData.slotIndex = i;
+      memoryGroup.add(prop.group);
+      memoryItems.push({ id: null, group: prop.group, glowMesh: prop.glowMesh, discovered: false, baseEmissive: prop.glowMesh.material.emissiveIntensity || 0 });
+    }
+
+    scene.add(memoryGroup);
+  }
+
+  function stage2SetItemVisual(index, discovered) {
+    const item = memoryItems[index];
+    if (!item) return;
+    item.discovered = discovered;
+    const targetIntensity = discovered ? Math.max(0.8, item.baseEmissive + 0.6) : item.baseEmissive;
+    item.glowMesh.material.emissiveIntensity = targetIntensity;
+    item.group.scale.setScalar(discovered ? 1.06 : 1);
+  }
+
+  // memories: [{id}], discoveredIds: [id,...], onSelect(id)
+  function startStage2(memories, discoveredIds, onSelect) {
+    memoryCallbacks.onSelect = onSelect || null;
+    const disc = new Set(discoveredIds || []);
+    memoryItems.forEach((item, i) => {
+      const mem = memories[i];
+      item.id = mem ? mem.id : null;
+      item.group.visible = !!mem;
+      if (mem) stage2SetItemVisual(i, disc.has(mem.id));
+    });
+  }
+
+  function stage2MarkDiscovered(id) {
+    const idx = memoryItems.findIndex(it => it.id === id);
+    if (idx >= 0) stage2SetItemVisual(idx, true);
+  }
+
+  function stopStage2() {
+    memoryCallbacks.onSelect = null;
+  }
+
+  function handleStage2Pick(e) {
+    if (currentScreen !== 'stage2' || !memoryGroup || !memoryGroup.visible) return;
+    const rect = canvas.getBoundingClientRect();
+    pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const targets = memoryItems.filter(it => it.id).map(it => it.group);
+    const hits = raycaster.intersectObjects(targets, true);
+    if (!hits.length) return;
+    let obj = hits[0].object;
+    while (obj && obj.userData.slotIndex === undefined) obj = obj.parent;
+    if (!obj) return;
+    const item = memoryItems[obj.userData.slotIndex];
+    if (item && item.id && memoryCallbacks.onSelect) memoryCallbacks.onSelect(item.id);
+  }
+
+  /* =================================================================
+     المرحلة ٥ — بيئة دافئة صغيرة حول صندوق الهدية (بدون البنت وبدون مطر)
+  ================================================================= */
+  function buildGiftEnv() {
+    giftEnvGroup = new THREE.Group();
+    giftEnvGroup.name = 'giftEnvGroup';
+    giftEnvGroup.visible = false;
+    giftEnvGroup.position.set(1.6, 0, -6.5);
+
+    const discCanvas = document.createElement('canvas');
+    discCanvas.width = discCanvas.height = 256;
+    const dctx = discCanvas.getContext('2d');
+    const rg = dctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    rg.addColorStop(0, '#3a2818');
+    rg.addColorStop(0.6, '#241a12');
+    rg.addColorStop(1, '#140f0a');
+    dctx.fillStyle = rg;
+    dctx.fillRect(0, 0, 256, 256);
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(4.2, 24),
+      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(discCanvas), roughness: 0.6 })
+    );
+    disc.rotation.x = -Math.PI / 2;
+    giftEnvGroup.add(disc);
+
+    const candleMat = new THREE.MeshStandardMaterial({ color: 0xfff3e0, roughness: 0.5 });
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a, fog: false });
+    const candleCount = 4;
+    for (let i = 0; i < candleCount; i++) {
+      const a = (i / candleCount) * Math.PI * 2;
+      const r = 2.3;
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.34, 8), candleMat);
+      body.position.y = 0.17; g.add(body);
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), flameMat);
+      flame.position.y = 0.37; g.add(flame);
+      const halo = simpleGlowSprite('rgba(255,207,122,0.6)', 0.5);
+      halo.position.y = 0.37; g.add(halo);
+      g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      giftEnvGroup.add(g);
+    }
+
+    const warmLight = new THREE.PointLight(0xffd9a0, 0.5, 8, 2);
+    warmLight.position.set(0, 2, 0.5);
+    giftEnvGroup.add(warmLight);
+
+    scene.add(giftEnvGroup);
+  }
+
   /* ---------------------------------------------------------------
      الشخصية — بنت 3D procedural كاملة، مبنية بالكامل من Three.js
      primitives (بدون أي ملف/Texture/Sprite/Emoji خارجي). الحركة
@@ -635,6 +1022,7 @@ const World = (() => {
 
     character.position.copy(IDLE_SPOT);
     character.rotation.y = IDLE_YAW;
+    character.visible = false; // لا تظهر إلا في المرحلة ٣ (تُفعّل عبر setScreen)
 
     scene.add(character);
     refreshReflection();
@@ -803,6 +1191,7 @@ const World = (() => {
     const old = character.userData.reflection;
     if (old) { reflectionGroup.remove(old); }
     const reflectionChar = character.clone(true);
+    reflectionChar.visible = true; // الوضوح الحقيقي يُحدَّده roadGroup.visible (المرحلة ٣ فقط) وليس character.visible
     reflectionChar.traverse((o) => {
       if (o.isMesh && o.material) {
         o.material = o.material.clone();
@@ -833,45 +1222,40 @@ const World = (() => {
     character.rotation.y += diff * Math.min(1, dt * CHARACTER_CONFIG.turnSpeed);
   }
 
-  // كل ما اقتربنا من النجوم، السرعة تقل تدريجيًا (لا توقف مفاجئ)
-  function computeSlowdownFactor() {
-    const distToEnd = character.position.distanceTo(RAIN_WALK.end);
-    if (distToEnd >= RAIN_WALK.approachSlowDistance) return 1;
-    const f = distToEnd / RAIN_WALK.approachSlowDistance;
-    return Math.max(RAIN_WALK.minSpeedFactor, f);
+  // ✏️ تحكم حقيقي من اللاعب في المرحلة ٣ — لا يوجد مشي تلقائي إطلاقًا.
+  // input: { x, z } بمدى -1..1 (يُغذّى من game.js عبر لوحة المفاتيح/الجويستيك)
+  function setStage3Move(x, z) {
+    stage3Input.x = clamp(x, -1, 1);
+    stage3Input.z = clamp(z, -1, 1);
   }
 
-  // تُستدعى من game.js لبدء مشي الشخصية تلقائيًا من بداية الطريق حتى النجوم
+  // تُستدعى من game.js لبدء التحكم اليدوي بالشخصية في مرحلة المطر
   // callbacks: { onProgress(t 0..1), onArrived() } — onArrived تُستدعى مرة واحدة فقط
-  // بعد وصول الشخصية فعليًا ووقفتها السينمائية القصيرة
-  function startRainJourney(callbacks) {
+  function startStage3(callbacks) {
     rainCallbacks = callbacks || {};
-    if (!rainCurve) buildRainCurve();
-    rainDistance = 0;
-    stepDistanceAccum = 0;
     resetGoalStarsGlow();
+    stage3Input.x = 0; stage3Input.z = 0;
     if (character) {
-      character.position.copy(RAIN_WALK.start);
-      const t0 = rainCurve.getTangentAt(0).normalize();
-      character.rotation.y = Math.atan2(t0.x, t0.z);
+      character.position.set(RAIN_WALK.start.x, 0, STAGE3_BOUNDS.zStart);
+      character.rotation.y = Math.PI; // تنظر نحو نهاية الطريق (اتجاه -z)
     }
-    characterMode = 'walking';
+    characterMode = 'playing';
   }
 
   // تُستدعى عند مغادرة مرحلة المطر (طبيعيًا أو بسبب إعادة البدء) لتصفير الحالة
-  function resetRainJourney() {
+  function resetStage3() {
     characterMode = 'idle';
     rainCallbacks = {};
+    stage3Input.x = 0; stage3Input.z = 0;
     resetGoalStarsGlow();
   }
+  // اسم قديم يبقى للتوافق
+  function resetRainJourney() { resetStage3(); }
 
   function arriveAtStars() {
-    if (characterMode !== 'walking') return;
+    if (characterMode !== 'playing') return;
     characterMode = 'arriving';
     arrivePauseTimer = RAIN_WALK.arrivePause;
-    character.position.copy(RAIN_WALK.end);
-    const tEnd = rainCurve.getTangentAt(1).normalize();
-    character.rotation.y = Math.atan2(tEnd.x, tEnd.z);
     triggerGoalStarsGlow();
     AudioManager && AudioManager.sfx && AudioManager.sfx('achievement');
   }
@@ -882,27 +1266,33 @@ const World = (() => {
 
     let moving = false;
 
-    if (characterMode === 'walking') {
-      moving = true;
-      const speedFactor = computeSlowdownFactor();
-      const step = RAIN_WALK.walkSpeed * speedFactor * dt;
-      rainDistance += step;
-      const t = clamp(rainCurveLength ? rainDistance / rainCurveLength : 1, 0, 1);
-      const pos = rainCurve.getPointAt(t);
-      const tangent = rainCurve.getTangentAt(t).normalize();
-      character.position.set(pos.x, 0, pos.z);
-      faceDirection(tangent.x, tangent.z, dt);
+    if (characterMode === 'playing') {
+      const mag = Math.hypot(stage3Input.x, stage3Input.z);
+      if (mag > 0.05) {
+        moving = true;
+        const nx = stage3Input.x / Math.max(mag, 1);
+        const nz = stage3Input.z / Math.max(mag, 1);
+        const speed = STAGE3_SPEED * Math.min(1, mag);
+        // z موجب من الجويستيك/الكيبورد = تقدّم للأمام نحو النجوم (اتجاه -z في العالم)
+        const worldDX = nx * speed * dt;
+        const worldDZ = -nz * speed * dt;
+        character.position.x = clamp(character.position.x + worldDX, STAGE3_BOUNDS.xMin, STAGE3_BOUNDS.xMax);
+        character.position.z = clamp(character.position.z + worldDZ, STAGE3_BOUNDS.zEnd - 1, STAGE3_BOUNDS.zStart + 1);
+        faceDirection(worldDX, worldDZ, dt);
 
-      stepDistanceAccum += step;
-      if (stepDistanceAccum > 1.0) {
-        AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
-        stepDistanceAccum = 0;
+        stepDistanceAccum += speed * dt;
+        if (stepDistanceAccum > 1.0) {
+          AudioManager && AudioManager.sfx && AudioManager.sfx('footstep');
+          stepDistanceAccum = 0;
+        }
       }
 
+      const total = STAGE3_BOUNDS.zStart - STAGE3_BOUNDS.zEnd;
+      const t = clamp(total > 0 ? (STAGE3_BOUNDS.zStart - character.position.z) / total : 1, 0, 1);
       if (rainCallbacks.onProgress) rainCallbacks.onProgress(t);
 
-      const distToEnd = character.position.distanceTo(RAIN_WALK.end);
-      if (t >= 1 || distToEnd < RAIN_WALK.arriveThreshold) {
+      const distToGoal = character.position.distanceTo(STAGE3_GOAL);
+      if (distToGoal < STAGE3_ARRIVE_DIST) {
         arriveAtStars();
       }
     } else if (characterMode === 'arriving') {
@@ -1032,6 +1422,7 @@ const World = (() => {
   }
 
   function onPointerDown(e) {
+    if (currentScreen === 'stage2') { handleStage2Pick(e); return; }
     if (currentScreen !== 'stage5' || giftOpened || !giftGroup || !giftGroup.visible) return;
     const rect = canvas.getBoundingClientRect();
     pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1135,15 +1526,15 @@ const World = (() => {
 
     let targetPos, lookAt;
     const inRainJourney = currentScreen === 'stage3' &&
-      (characterMode === 'walking' || characterMode === 'arriving' || characterMode === 'arrived');
+      (characterMode === 'playing' || characterMode === 'arriving' || characterMode === 'arrived');
 
     if (currentScreen === 'stage5' && giftGroup) {
       targetPos = new THREE.Vector3(giftGroup.position.x + 1.4, 1.5, giftGroup.position.z + 2.6);
       lookAt = new THREE.Vector3(giftGroup.position.x, 0.6, giftGroup.position.z);
     } else if (inRainJourney && character) {
-      // كاميرا سينمائية ناعمة تتبع الشخصية أثناء مشيها تجاه النجوم، وتقترب قليلًا عند الوصول
+      // كاميرا سينمائية ناعمة تتبع الشخصية أثناء تحكم اللاعب بها نحو النجوم
       const facing = new THREE.Vector3(Math.sin(character.rotation.y), 0, Math.cos(character.rotation.y));
-      const arrived = characterMode !== 'walking';
+      const arrived = characterMode !== 'playing';
       const followDist = arrived ? 3.1 : 4.6;
       const heightOff = arrived ? 1.9 : 2.3;
       targetPos = character.position.clone()
@@ -1156,8 +1547,22 @@ const World = (() => {
     } else if (currentScreen === 'intro') {
       targetPos = new THREE.Vector3(idleX, idleY, 10);
       lookAt = new THREE.Vector3(0, 1.6, -6);
+    } else if (currentScreen === 'stage1' && heartsGroup) {
+      // حديقة جمع القلوب — إطلالة أمامية دافئة تسمح بمساحة كافية للّعب باللمس
+      const c = heartsGroup.position;
+      targetPos = new THREE.Vector3(c.x + idleX * 0.3, 3.0, c.z + 8.5);
+      lookAt = new THREE.Vector3(c.x, 1.3, c.z - 1);
+    } else if (currentScreen === 'stage2' && memoryGroup) {
+      // حديقة الذكريات — إطلالة أوسع تُظهر كل العناصر التفاعلية معًا
+      const c = memoryGroup.position;
+      targetPos = new THREE.Vector3(c.x + idleX * 0.2, 3.8, c.z + 8.8);
+      lookAt = new THREE.Vector3(c.x, 0.9, c.z - 1.5);
+    } else if (currentScreen === 'stage4') {
+      // سماء الأمنيات — تبتعد الكاميرا وتميل لأعلى نحو حقل النجوم الواسع
+      targetPos = new THREE.Vector3(idleX * 0.5, 5.5, 4);
+      lookAt = new THREE.Vector3(0, 10, -20);
     } else {
-      // شاشات ثابتة (البداية بدون تشغيل بعد، المرحلة ١، ٢، ٤): الشخصية Idle فقط
+      // أي شاشة أخرى ثابتة: الشخصية Idle فقط
       const p = character ? character.position : IDLE_SPOT;
       targetPos = new THREE.Vector3(p.x + idleX * 0.4, 2.4, p.z + 4.2);
       lookAt = new THREE.Vector3(p.x, 1.1, p.z - 2);
@@ -1204,22 +1609,37 @@ const World = (() => {
     const leavingRain = currentScreen === 'stage3' && name !== 'stage3';
     currentScreen = name;
 
+    // كل مرحلة بيئتها الخاصة — نظهر مجموعة واحدة فقط في كل مرة
+    if (roadGroup) roadGroup.visible = (name === 'stage3');
+    if (heartsGroup) heartsGroup.visible = (name === 'stage1');
+    if (memoryGroup) memoryGroup.visible = (name === 'stage2');
+
     if (name === 'stage5') {
       buildGiftBox();
       if (giftGroup) giftGroup.visible = true;
-    } else if (giftGroup) {
-      giftGroup.visible = false;
+      if (giftEnvGroup) giftEnvGroup.visible = true;
+    } else {
+      if (giftGroup) giftGroup.visible = false;
+      if (giftEnvGroup) giftEnvGroup.visible = false;
     }
 
-    // أي شاشة غير مرحلة المطر: الشخصية ثابتة (Idle) في مكانها المخصص، بدون أي حركة
+    // الشخصية 3D procedural تظهر فقط في المرحلة ٣ (ليلة المطر) ولا تظهر في أي مرحلة أخرى
+    if (character) character.visible = (name === 'stage3');
+
     if (name !== 'stage3') {
-      if (leavingRain) resetRainJourney();
+      if (leavingRain) resetStage3();
       characterMode = 'idle';
       if (character) {
         character.position.copy(IDLE_SPOT);
         character.rotation.y = IDLE_YAW;
       }
     }
+  }
+
+  // واجهة إضافية مطلوبة: setStage(1..5) — نفس منطق setScreen لكن بأرقام المراحل
+  function setStage(stage) {
+    if (typeof stage === 'number') setScreen(`stage${stage}`);
+    else setScreen(stage);
   }
 
   function triggerGiftOpen(cb) {
@@ -1241,8 +1661,22 @@ const World = (() => {
     init,
     resize,
     setScreen,
-    startRainJourney,
+    setStage,
+    // المرحلة ١ — جمع القلوب 3D
+    stage1Render,
+    stage1Stop,
+    // المرحلة ٢ — حديقة الذكريات التفاعلية 3D
+    startStage2,
+    stage2MarkDiscovered,
+    stopStage2,
+    // المرحلة ٣ — تحكم حقيقي من اللاعب (بدون مشي تلقائي)
+    startStage3,
+    setStage3Move,
+    resetStage3,
+    // أسماء قديمة للتوافق مع أي كود سابق
+    startRainJourney: startStage3,
     resetRainJourney,
+    // المرحلة ٥ — الهدية
     triggerGiftOpen,
     markGiftOpened,
     get isReady() { return ready; },

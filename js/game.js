@@ -208,14 +208,31 @@ const Game = (() => {
       }
 
       const bounds = { width, height };
-      for (const h of hearts) Physics.updateFallingHeart(h, bounds);
+      for (const h of hearts) {
+        // انجذاب خفيف نحو اللاعب كلما اقترب القلب منه (إحساس تفاعلي أكثر)
+        const dx = player.x - h.x, dy = player.y - h.y;
+        const dist = Math.hypot(dx, dy);
+        const pullRadius = h.radius * 4.5;
+        if (dist < pullRadius && dist > 1) {
+          const pull = (1 - dist / pullRadius) * 0.6;
+          h.x += (dx / dist) * pull;
+          h.y += (dy / dist) * pull;
+        }
+        Physics.updateFallingHeart(h, bounds);
+      }
       hearts = hearts.filter(h => h.y < height + 60);
 
       updatePlayer();
       checkCollisions();
 
-      for (const h of hearts) drawHeartShape(h);
-      drawPlayer();
+      const worldReady = typeof World !== 'undefined' && World.isReady;
+      if (worldReady) {
+        // القلوب تُرسم كمجسّمات 3D حقيقية داخل عالم Three.js (وليست Emoji)
+        World.stage1Render(hearts, player, width, height);
+      } else {
+        for (const h of hearts) drawHeartShape(h);
+        drawPlayer();
+      }
 
       raf = requestAnimationFrame(loop);
     }
@@ -249,6 +266,7 @@ const Game = (() => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', resize);
+      if (typeof World !== 'undefined' && World.isReady) World.stage1Stop();
     }
 
     return { start, stop };
@@ -259,8 +277,19 @@ const Game = (() => {
      ===================================================================== */
   const Stage2 = (() => {
     let container, continueBtn;
+    let usingWorld = false;
 
-    function render() {
+    // ---------- المسار الأساسي: عناصر 3D تفاعلية حقيقية داخل عالم Three.js ----------
+    function findMemById(id) { return MEMORIES.find(m => m.id === id); }
+
+    function onWorldSelect(id) {
+      const mem = findMemById(id);
+      if (!mem) return;
+      openMemoryCore(mem, () => World.stage2MarkDiscovered(id));
+    }
+
+    // ---------- Fallback بدون WebGL: نفس شبكة الإيموجي القديمة ----------
+    function renderDomGrid() {
       container.innerHTML = '';
       MEMORIES.forEach(mem => {
         const el = document.createElement('div');
@@ -272,20 +301,20 @@ const Game = (() => {
         el.style.animationDelay = `${Math.random() * 2}s`;
         if (state.memoriesDiscovered.includes(mem.id)) el.classList.add('discovered');
 
-        const open = () => openMemory(mem, el);
+        const open = () => openMemoryCore(mem, () => el.classList.add('discovered'));
         el.addEventListener('click', open);
         el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(); });
 
         container.appendChild(el);
       });
-      updateContinueVisibility();
     }
 
-    function openMemory(mem, el) {
+    // ---------- منطق مشترك: تسجيل الاكتشاف + النقاط + الإنجاز + فتح نافذة الذكرى ----------
+    function openMemoryCore(mem, markDiscoveredVisual) {
       AudioManager.sfx('click');
       if (!state.memoriesDiscovered.includes(mem.id)) {
         state.memoriesDiscovered.push(mem.id);
-        el.classList.add('discovered');
+        if (markDiscoveredVisual) markDiscoveredVisual();
         addScore(25);
         ParticleSystem.emit('sparkle', window.innerWidth / 2, window.innerHeight / 2, 6, { life: 30, gravity: 0 });
         if (state.memoriesDiscovered.length >= MEMORIES.length) {
@@ -307,10 +336,20 @@ const Game = (() => {
       container = containerEl;
       continueBtn = continueBtnEl;
       continueBtn.classList.add('hidden');
-      render();
+      usingWorld = typeof World !== 'undefined' && World.isReady;
+      if (usingWorld) {
+        container.classList.add('hidden');
+        World.startStage2(MEMORIES, state.memoriesDiscovered, onWorldSelect);
+      } else {
+        container.classList.remove('hidden');
+        renderDomGrid();
+      }
+      updateContinueVisibility();
     }
 
-    function stop() { /* لا حاجة لتنظيف خاص */ }
+    function stop() {
+      if (usingWorld && typeof World !== 'undefined' && World.isReady) World.stopStage2();
+    }
 
     return { start, stop, get total() { return MEMORIES.length; } };
   })();
@@ -327,6 +366,91 @@ const Game = (() => {
     let convertProgress = 0;
     let arrived = false;
     let fallbackTimer = null;
+    let usingWorld = false;
+
+    // ---------- تحكم لوحة المفاتيح (WASD / أسهم) ----------
+    const keys = {};
+    function onKeyDown(e) { keys[e.key.toLowerCase()] = true; }
+    function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
+    function keyboardVector() {
+      let x = 0, z = 0;
+      if (keys['arrowleft'] || keys['a']) x -= 1;
+      if (keys['arrowright'] || keys['d']) x += 1;
+      if (keys['arrowup'] || keys['w']) z += 1;
+      if (keys['arrowdown'] || keys['s']) z -= 1;
+      return { x, z };
+    }
+
+    // ---------- الجويستيك الافتراضي للموبايل — يظهر في المرحلة ٣ فقط ----------
+    let joyZone, joyBase, joyStick;
+    let joyActive = false, joyTouchId = null, joyVec = { x: 0, z: 0 };
+    const JOY_RADIUS = 46;
+
+    function joyPointFromEvent(e) {
+      const rect = joyBase.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      return { px: e.clientX - cx, py: e.clientY - cy };
+    }
+
+    function onJoyStart(e) {
+      const t = e.touches ? e.touches[0] : e;
+      if (e.touches) joyTouchId = t.identifier;
+      joyActive = true;
+      updateJoyFromPoint(t);
+    }
+    function onJoyMove(e) {
+      if (!joyActive) return;
+      let t = e;
+      if (e.touches) {
+        t = Array.from(e.touches).find(tt => tt.identifier === joyTouchId);
+        if (!t) return;
+      }
+      updateJoyFromPoint(t);
+    }
+    function onJoyEnd() {
+      joyActive = false;
+      joyTouchId = null;
+      joyVec.x = 0; joyVec.z = 0;
+      if (joyStick) joyStick.style.transform = 'translate(0px, 0px)';
+    }
+    function updateJoyFromPoint(t) {
+      const { px, py } = joyPointFromEvent(t);
+      const dist = Math.min(JOY_RADIUS, Math.hypot(px, py));
+      const angle = Math.atan2(py, px);
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      if (joyStick) joyStick.style.transform = `translate(${dx}px, ${dy}px)`;
+      joyVec.x = dx / JOY_RADIUS;
+      joyVec.z = -dy / JOY_RADIUS; // أعلى الجويستيك = تقدّم للأمام
+    }
+
+    function showJoystick() {
+      joyZone = document.getElementById('joystick-zone');
+      joyBase = document.getElementById('joystick-base');
+      joyStick = document.getElementById('joystick-stick');
+      if (!joyZone) return;
+      joyZone.classList.remove('hidden');
+      joyZone.addEventListener('touchstart', onJoyStart, { passive: true });
+      joyZone.addEventListener('touchmove', onJoyMove, { passive: true });
+      joyZone.addEventListener('touchend', onJoyEnd, { passive: true });
+      joyZone.addEventListener('touchcancel', onJoyEnd, { passive: true });
+      joyZone.addEventListener('mousedown', onJoyStart);
+      window.addEventListener('mousemove', onJoyMove);
+      window.addEventListener('mouseup', onJoyEnd);
+    }
+    function hideJoystick() {
+      if (!joyZone) return;
+      joyZone.classList.add('hidden');
+      joyZone.removeEventListener('touchstart', onJoyStart);
+      joyZone.removeEventListener('touchmove', onJoyMove);
+      joyZone.removeEventListener('touchend', onJoyEnd);
+      joyZone.removeEventListener('touchcancel', onJoyEnd);
+      joyZone.removeEventListener('mousedown', onJoyStart);
+      window.removeEventListener('mousemove', onJoyMove);
+      window.removeEventListener('mouseup', onJoyEnd);
+      onJoyEnd();
+    }
 
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -380,6 +504,15 @@ const Game = (() => {
       if (!active) return;
       ctx.clearRect(0, 0, width, height);
 
+      if (usingWorld && !converting && !arrived) {
+        const kb = keyboardVector();
+        let x = kb.x + joyVec.x;
+        let z = kb.z + joyVec.z;
+        const mag = Math.hypot(x, z);
+        if (mag > 1) { x /= mag; z /= mag; }
+        World.setStage3Move(x, z);
+      }
+
       if (!converting) {
         ParticleSystem.emitRain(1);
       } else {
@@ -411,11 +544,17 @@ const Game = (() => {
       resize();
       window.addEventListener('resize', resize);
 
-      // الشخصية 3D تمشي تلقائيًا بمفردها من بداية الطريق حتى النجوم — بدون أي تحكم باللمس/الماوس/الكيبورد
-      if (typeof World !== 'undefined' && World.isReady) {
-        World.startRainJourney({ onProgress: onWalkProgress, onArrived: onWalkArrived });
+      usingWorld = typeof World !== 'undefined' && World.isReady;
+
+      // تحكم حقيقي من اللاعب: كيبورد (WASD/أسهم) على الكمبيوتر + جويستيك افتراضي على الموبايل
+      window.addEventListener('keydown', onKeyDown);
+      window.addEventListener('keyup', onKeyUp);
+      showJoystick();
+
+      if (usingWorld) {
+        World.startStage3({ onProgress: onWalkProgress, onArrived: onWalkArrived });
       } else {
-        // Fallback بدون WebGL: نفس تسلسل الرسائل لكن بتوقيت زمني ثابت بدل مشي 3D حقيقي
+        // Fallback بدون WebGL: نفس تسلسل الرسائل لكن بتوقيت زمني ثابت بدل التحكم 3D الحقيقي
         let i = 0;
         const revealNext = () => {
           if (!active) return;
@@ -439,7 +578,10 @@ const Game = (() => {
       if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
       ParticleSystem.clear('rain');
       window.removeEventListener('resize', resize);
-      if (typeof World !== 'undefined' && World.isReady) World.resetRainJourney();
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      hideJoystick();
+      if (usingWorld && typeof World !== 'undefined' && World.isReady) World.resetStage3();
     }
 
     return { start, stop };

@@ -706,6 +706,11 @@ body.no-webgl .gift-hit-area.opened::before { content: '💌'; }
   -webkit-tap-highlight-color: transparent;
 }
 
+/* رسالة المرحلة ٣ ترتفع قليلًا كي لا تتداخل أبدًا مع الجويستيك أسفل اليسار */
+#rain-message {
+  bottom: calc(160px + var(--safe-bottom));
+}
+
 .joystick-base {
   position: relative;
   width: 100%;
