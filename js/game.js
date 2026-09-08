@@ -336,14 +336,11 @@ const Game = (() => {
       container = containerEl;
       continueBtn = continueBtnEl;
       continueBtn.classList.add('hidden');
-      usingWorld = typeof World !== 'undefined' && World.isReady;
-      if (usingWorld) {
-        container.classList.add('hidden');
-        World.startStage2(MEMORIES, state.memoriesDiscovered, onWorldSelect);
-      } else {
-        container.classList.remove('hidden');
-        renderDomGrid();
-      }
+      // ✏️ المرحلة ٢ بتستخدم دايمًا شبكة الإيموجي المرتبة (بدل عالم Three.js
+      // ثلاثي الأبعاد) عشان يبقى شكل العناصر واضح ومرتب زي الإيموجي المتفق عليه
+      usingWorld = false;
+      container.classList.remove('hidden');
+      renderDomGrid();
       updateContinueVisibility();
     }
 

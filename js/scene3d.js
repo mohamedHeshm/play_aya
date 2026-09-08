@@ -1612,7 +1612,9 @@ const World = (() => {
     // كل مرحلة بيئتها الخاصة — نظهر مجموعة واحدة فقط في كل مرة
     if (roadGroup) roadGroup.visible = (name === 'stage3');
     if (heartsGroup) heartsGroup.visible = (name === 'stage1');
-    if (memoryGroup) memoryGroup.visible = (name === 'stage2');
+    // المرحلة ٢ بقت بتعرض شبكة الإيموجي المرتبة بدل العناصر ثلاثية الأبعاد،
+    // فمفيش داعي نظهرها تاني (بتفضل مبنية بس مخفية للحفاظ على باقي الكود شغّال)
+    if (memoryGroup) memoryGroup.visible = false;
 
     if (name === 'stage5') {
       buildGiftBox();
